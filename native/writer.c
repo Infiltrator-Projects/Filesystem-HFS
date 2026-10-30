@@ -1702,7 +1702,7 @@ static void writer_usage(FILE *stream)
         HFS_PROG);
 }
 
-int main(int argc, char **argv)
+int ifs_hfs_worker_main(int argc, char **argv)
 {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         (void)printf("%s %s\n", HFS_PROG, LD_VERSION);

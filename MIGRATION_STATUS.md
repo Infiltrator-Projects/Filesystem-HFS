@@ -1,3 +1,9 @@
-# HFS migration — 2026-10-30
+# Classic HFS driver migration
 
-Native source copied unchanged from Infiltrator-Projects/Defragmenter commit 30af892d8897d3aeaeefeac1bfcdb9620a0a5c72. Current import is a **source handoff only** and the old Defragmenter implementation remains active unchanged. This repository does not yet build an independently qualified `HFS.so` with Common ABI/Boot/kernel integration. The `migration/defragmenter/native/` folder preserves the original engine for integration and regression testing. Classic HFS is deliberately distinct from HFS+.
+The first-party classic HFS analysis, Defrag, Growth Defrag and durable recovery
+writer is now built in HFS.so. The Test Media HFS layout creator and verifier
+were transferred into the same module with a typed callback to the host-owned
+generic corpus and raw I/O. This remains separate from HFS+/HFSX.
+
+**Not complete** until Defragmenter removes the native HFS worker and Test Media
+writer, invokes HFS.so exclusively and passes full end-to-end regression.

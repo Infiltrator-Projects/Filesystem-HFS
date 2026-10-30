@@ -1,0 +1,23 @@
+name: HFS independent SO build and ABI tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  hfs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build independent HFS.so
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+      - name: Run independent ABI test
+        run: |
+          ctest --test-dir build --output-on-failure
+          test -f build/HFS.so
+          nm -D build/HFS.so | grep -F infiltrator_filesystem_hfs_v1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HFS.so
+          path: build/HFS.so
