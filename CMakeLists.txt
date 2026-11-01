@@ -33,3 +33,6 @@ if(BUILD_TESTING)
  add_test(NAME hfs-module-interface COMMAND hfs-module-test)
 endif()
 install(TARGETS hfs-driver LIBRARY DESTINATION /System/Filesystems)
+# Install only this filesystem's illustrated PDF beside its native shared object.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/docs/HFS.pdf"
+        DESTINATION /System/Resources/Documentation/Filesystem-HFS)
