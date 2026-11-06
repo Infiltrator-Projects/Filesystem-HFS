@@ -1,9 +1,5 @@
-# Classic HFS driver migration
+# HFS source consolidation — 6 November 2026
 
-The first-party classic HFS analysis, Defrag, Growth Defrag and durable recovery
-writer is now built in HFS.so. The Test Media HFS layout creator and verifier
-were transferred into the same module with a typed callback to the host-owned
-generic corpus and raw I/O. This remains separate from HFS+/HFSX.
+The independent HFS repository now retains all 22 native source/design files from `Infiltrator-Projects/Filesystems` main commit `a253fb724ce1fd760a361219281effb6abd71367`, including the original kernel VFS driver and its provenance. The existing HFS analysis/defragmenter shared-object implementation was preserved, not replaced with a kernel module or declared to have untested writer functionality.
 
-**Not complete** until Defragmenter removes the native HFS worker and Test Media
-writer, invokes HFS.so exclusively and passes full end-to-end regression.
+The `standalone/kernel.json` now builds `hfs.ko` from this repository's local Linux source, without downloading a historical Filesystems snapshot. Keep the `.so` build, kernel compilation and independent HFS media tests as separate qualification gates; remove the central engine only after build/CI consumer cutover is validated.
