@@ -16,7 +16,8 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure
           test -f build/HFS.so
-          nm -D build/HFS.so | grep -F infiltrator_filesystem_hfs_v1
+          nm -D --defined-only build/HFS.so | grep -F infiltrator_filesystem_api_v2
+          ! nm -D --defined-only build/HFS.so | grep -E 'infiltrator_filesystem_.*_v1'
       - uses: actions/upload-artifact@v4
         with:
           name: HFS.so
