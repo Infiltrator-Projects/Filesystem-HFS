@@ -11,9 +11,11 @@ extern const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void);
 #define SIZE (1024u*1024u)
 static unsigned char media[SIZE];
 static int fail_reads;
+static uint32_t logical_sector=512u,maximum_read=512u;
 static int rd(void *ctx,uint64_t at,void *dst,uint32_t n) {
     (void)ctx;
-    if(fail_reads || at>SIZE || n>SIZE-at)return -1;
+    if(fail_reads || (at%logical_sector) || (n%logical_sector) ||
+       n>maximum_read || at>SIZE || n>SIZE-at)return -1;
     memcpy(dst,media+(size_t)at,n);return 0;
 }
 static void *alloc(void *ctx,size_t n){(void)ctx;return malloc(n);}
@@ -89,6 +91,22 @@ int main(void) {
           mounted && mounted!=stale);
     CHECK(ops->query(stale,&recheck)==IFS_FS_INVALID);
     CHECK(core->unmount(mounted)==IFS_FS_OK);
+    /* On 4Kn media, the host must NEVER receive read_at(1024,512).
+     * The same 512-byte MDB still begins at byte 1024. */
+    host.logical_sector_bytes=4096u;
+    host.physical_sector_bytes=4096u;
+    host.maximum_transfer_bytes=4096u;
+    logical_sector=4096u;maximum_read=4096u;
+    CHECK(ifs_fs_host_v2_valid(&host));
+    CHECK(core->probe(&host,&variant)==IFS_FS_OK && variant==1u);
+    info.structure_bytes=sizeof(info);
+    CHECK(core->mount(&host,&mounted,&info)==IFS_FS_OK &&
+          info.block_bytes==4096u && info.free_bytes==163840u);
+    CHECK(core->unmount(mounted)==IFS_FS_OK);
+    logical_sector=512u;maximum_read=512u;
+    host.logical_sector_bytes=512u;
+    host.physical_sector_bytes=512u;
+    host.maximum_transfer_bytes=512u;
     be16(1024u+124u,0x482bu);
     CHECK(core->probe(&host,&variant)==IFS_FS_UNSUPPORTED && variant==0u);
     be16(1024u+124u,0x4858u);

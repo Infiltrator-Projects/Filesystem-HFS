@@ -27,10 +27,13 @@ static int examine(const IfsFsHostRuntimeV2 *host,uint32_t *variant,
     uint16_t blocks,bitmap,first,free_blocks;
     if(!variant || !ifs_fs_host_v2_valid(host))return IFS_FS_INVALID;
     *variant=0u;
-    if(host->volume_bytes<1536u || host->maximum_transfer_bytes<sizeof(mdb))
-        return IFS_FS_NOT_FOUND;
-    if(host->read_at(host->context,1024u,mdb,sizeof(mdb))!=0)
-        return IFS_FS_IO_ERROR;
+    if(host->volume_bytes<1536u)return IFS_FS_NOT_FOUND;
+    {
+        /* The MDB is at byte 1024, not necessarily a sector boundary.
+         * Common V2 makes the authenticated physical reads sector-aligned. */
+        int rc=ifs_fs_host_read_bytes_v2(host,1024u,mdb,(uint32_t)sizeof(mdb));
+        if(rc!=IFS_FS_OK)return rc;
+    }
     if(be16(mdb)!=UINT16_C(0x4244))return IFS_FS_NOT_FOUND;
     if(be16(mdb+124u)==UINT16_C(0x482b) ||
        be16(mdb+124u)==UINT16_C(0x4858))
