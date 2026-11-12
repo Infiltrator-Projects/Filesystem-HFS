@@ -31,6 +31,11 @@ static void be32(unsigned offset,uint32_t n) {
     media[offset+3]=(unsigned char)n;
 }
 #define CHECK(x) do {if(!(x)) {fprintf(stderr,"HFS V2 failure: %s line %d\n",#x,__LINE__);return 1;}}while(0)
+/* Valid writable-host callbacks: provider must refuse before using them. */
+static int forbidden_write(void *ctx,uint64_t at,const void *src,uint32_t n)
+{ (void)ctx;(void)at;(void)src;(void)n;return -1; }
+static int forbidden_flush(void *ctx)
+{ (void)ctx;return -1; }
 int main(void) {
     const IfsFsModuleApiV2 *api=infiltrator_filesystem_api_v2();
     CHECK(ifs_fs_api_v2_valid(api,"hfs"));
@@ -68,6 +73,14 @@ int main(void) {
     IfsFsVolumeInfoV2 info={0},recheck={0};
     void *mounted=NULL,*stale=NULL;
     info.structure_bytes=sizeof(info);
+    host.capabilities=IFS_FS_HOST_EXCLUSIVE|IFS_FS_HOST_DURABLE;
+    host.write_at=forbidden_write;host.flush=forbidden_flush;
+    CHECK(ifs_fs_host_v2_valid(&host));
+    CHECK(core->probe(&host,&variant)==IFS_FS_OK);
+    CHECK(core->mount(&host,&mounted,&info)==IFS_FS_ACCESS && !mounted);
+    host.capabilities=IFS_FS_HOST_READ_ONLY;
+    host.write_at=NULL;host.flush=NULL;
+    CHECK(ifs_fs_host_v2_valid(&host));
     CHECK(core->mount(&host,&mounted,&info)==IFS_FS_OK && mounted);
     stale=mounted;
     CHECK(info.variant==1u && info.block_bytes==4096u &&

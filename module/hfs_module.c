@@ -90,6 +90,11 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host,void **volume,
     if(!volume || !info || info->structure_bytes<sizeof(*info))
         return IFS_FS_INVALID;
     *volume=NULL;
+    if(!ifs_fs_host_v2_valid(host))return IFS_FS_INVALID;
+    /* CORE.MOUNT is read-only. A valid exclusive writable host is NOT
+     * interchangeable with a read-only host, even when no write callback
+     * is advertised by this provider. */
+    if(!(host->capabilities & IFS_FS_HOST_READ_ONLY))return IFS_FS_ACCESS;
     if(session.active || session.generation==UINTPTR_MAX)
         return IFS_FS_BUSY;
     rc=examine(host,&variant,&observed);
