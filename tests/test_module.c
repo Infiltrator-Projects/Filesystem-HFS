@@ -69,7 +69,15 @@ int main(void) {
     be32(1024u+20u,4096u);
     be16(1024u+28u,64u); /* data begins after bitmap */
     be16(1024u+34u,40u);
+    /* 60 used and 40 free blocks in an actual HFS MSB-first bitmap. */
+    for(unsigned bit=0u;bit<60u;++bit)
+        media[3u*512u+(bit>>3u)] |=
+            (unsigned char)(0x80u>>(bit&7u));
     CHECK(core->probe(&host,&variant)==IFS_FS_OK && variant==1u);
+    media[3u*512u]^=0x80u; /* MDB unchanged: must reject disagreement */
+    CHECK(core->probe(&host,&variant)==IFS_FS_CORRUPT);
+    media[3u*512u]^=0x80u;
+    CHECK(core->probe(&host,&variant)==IFS_FS_OK);
     IfsFsVolumeInfoV2 info={0},recheck={0};
     void *mounted=NULL,*stale=NULL;
     info.structure_bytes=sizeof(info);

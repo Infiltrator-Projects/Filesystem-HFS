@@ -56,6 +56,25 @@ static int examine(const IfsFsHostRuntimeV2 *host,uint32_t *variant,
     bitmap_end=bitmap_start+((uint64_t)blocks+7u)/8u;
     if(bitmap_end>allocation)
         return IFS_FS_CORRUPT;
+    /* The MDB free count is only a recorded summary. Verify it against
+     * the real big-endian allocation bitmap, whose MSB-first bit 1 means
+     * allocated (as in the repository's native HFS bitmap engine).
+     * Reject a stale or damaged count before publishing VOLUME.QUERY. */
+    const uint32_t map_bytes=((uint32_t)blocks+7u)/8u;
+    unsigned char *map=host->allocate(host->context,map_bytes);
+    if(!map)return IFS_FS_NO_MEMORY;
+    int read_rc=ifs_fs_host_read_bytes_v2(host,bitmap_start,map,map_bytes);
+    if(read_rc!=IFS_FS_OK) {
+        host->release(host->context,map);
+        return read_rc;
+    }
+    uint32_t verified_free=0u;
+    for(uint32_t index=0u;index<blocks;++index)
+        if(!(map[index>>3u]&(unsigned char)(0x80u>>(index&7u))))
+            ++verified_free;
+    host->release(host->context,map);
+    if(verified_free!=free_blocks)
+        return IFS_FS_CORRUPT;
     *variant=1u;
     if(details) {
         details->structure_bytes=sizeof(*details);
