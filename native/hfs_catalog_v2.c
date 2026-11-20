@@ -160,7 +160,12 @@ static int parse_entry(const uint8_t *node, uint32_t size,
         (uint32_t)key_length+1u>finish-start)
         return IFS_FS_CORRUPT;
     uint8_t length=key[6];
-    if (length>31u || (uint32_t)key_length!=6u+length)
+    /* HFS catalogue threads encode an empty Pascal name as a 7-byte
+     * search key. Reject arbitrary key-length mismatches but preserve
+     * the native root/file thread record, which is not a directory child. */
+    const int empty_thread_key = (length==0u && key_length==7u);
+    if (length>31u ||
+        ((uint32_t)key_length!=6u+length && !empty_thread_key))
         return IFS_FS_CORRUPT;
     uint32_t data_off=start+((uint32_t)(key_length+2u)&~1u);
     if (data_off>=finish) return IFS_FS_CORRUPT;
@@ -170,6 +175,8 @@ static int parse_entry(const uint8_t *node, uint32_t size,
     memcpy(entry->name,key+7u,length);
     const uint8_t *record=node+data_off;
     const uint32_t available=finish-data_off;
+    if (empty_thread_key && record[0]!=3u && record[0]!=4u)
+        return IFS_FS_CORRUPT;
     if (record[0]==HFS_RECORD_DIRECTORY) {
         if (available<70u) return IFS_FS_CORRUPT;
         entry->type=IFS_FS_ENTRY_DIRECTORY;
