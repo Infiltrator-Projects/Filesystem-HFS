@@ -100,6 +100,8 @@ int main(int argc,char **argv)
     for(uint32_t i=0;i<1024u;++i) {
         int rc=core->directory_entry(volume,"/",i,&entry);
         if(rc==IFS_FS_END){found_end=1;break;}
+        if(rc!=IFS_FS_OK)
+            fprintf(stderr,"HFS list index=%u rc=%d\n",i,rc);
         VERIFY(rc==IFS_FS_OK);
         if(!strcmp(name,"kernel.img"))found_kernel=1;
         if(!strcmp(name,"initramfs"))found_initrd=1;
