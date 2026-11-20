@@ -41,6 +41,29 @@ jobs:
           test "$(find "$RUNNER_TEMP/native-root" -type f | wc -l)" = 2
           bash tests/check_v2_exports.sh "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"
           test "$(find "$RUNNER_TEMP/native-root" -name '*.ko' | wc -l)" = 0
+      - name: Validate actual portable and CPU-native installed HFS.so against BOOT 0.1.77
+        shell: bash
+        run: |
+          set -euo pipefail
+          boot=infiltrator-boot_0.1.77_amd64.deb
+          curl -fsSL --retry 3 \
+            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.77/$boot" \
+            -o "$RUNNER_TEMP/$boot"
+          printf '%s  %s\n' \
+            4b2fa8eaa116b7e719329c5bbaa39ee3a093fbe1c1eac0c57440d0f82217d8a5 \
+            "$RUNNER_TEMP/$boot" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/$boot" "$RUNNER_TEMP/boot"
+          validator="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/validate-module"
+          for module in \
+             "$RUNNER_TEMP/portable/System/Filesystems/HFS.so" \
+             "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"; do
+            test -s "$module"
+            readelf -SW "$module" | grep -F .infiltrator_boot
+            ! nm -D --defined-only "$module" | grep -E 'infiltrator_filesystem_.*_v1'
+            "$validator" "$module"
+          done
+          echo HFS_PACKAGED_COMMON_V2_BOTH_VARIANTS_VALIDATED
+
       - uses: actions/upload-artifact@v4
         with:
           name: HFS-hosted-v2-qualification-only
