@@ -18,8 +18,11 @@ typedef struct {
     uint32_t catalogue_size;
     HfsExtentV2 catalogue_extents[3];
     uint32_t node_bytes, node_count, first_leaf;
+    uint8_t *allocation_bitmap;
+    uint32_t bitmap_bytes;
 } HfsCatalogueV2;
 int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *, HfsCatalogueV2 *);
+void hfs_catalogue_close_v2(HfsCatalogueV2 *);
 int hfs_catalogue_stat_v2(const HfsCatalogueV2 *, const char *, IfsFsEntryV2 *);
 int hfs_catalogue_list_v2(const HfsCatalogueV2 *, const char *, uint32_t, IfsFsEntryV2 *);
 int hfs_catalogue_read_v2(const HfsCatalogueV2 *, const char *, uint64_t, void *, uint32_t);

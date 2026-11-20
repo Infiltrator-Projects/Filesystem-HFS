@@ -139,7 +139,7 @@ static int unmount_volume(void *volume)
     HfsMount *slot=get_mount(volume);
     if (!slot) return IFS_FS_INVALID;
     slot->token=0u;
-    slot->catalog=(HfsCatalogueV2){0};
+    hfs_catalogue_close_v2(&slot->catalog);
     slot->host=(IfsFsHostRuntimeV2){0};
     slot->info=(IfsFsVolumeInfoV2){0};
     return IFS_FS_OK;

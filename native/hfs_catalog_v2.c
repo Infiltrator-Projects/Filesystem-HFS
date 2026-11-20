@@ -82,16 +82,19 @@ static int tree_read(const HfsCatalogueV2 *v, uint64_t off,
 }
 static int bit_used(const HfsCatalogueV2 *v, uint32_t block)
 {
-    /* Classic HFS allocation bits are MSB-first and partition-relative. */
-    if (block>=v->allocation_blocks) return IFS_FS_CORRUPT;
-    uint8_t value=0;
-    uint8_t mdb[512];
-    int rc=media_read(v->host,1024u,mdb,sizeof(mdb));
-    if (rc!=IFS_FS_OK) return rc;
-    uint64_t bitmap=(uint64_t)be16(mdb+14u)*512u+(block>>3u);
-    rc=media_read(v->host,bitmap,&value,1u);
-    if (rc!=IFS_FS_OK) return rc;
-    return (value & (0x80u>>(block&7u))) ? IFS_FS_OK : IFS_FS_CORRUPT;
+    /* The mount owns one immutable, verified MSB-first allocation bitmap.
+     * File read chunks must not re-read all bitmap sectors per operation. */
+    if (!v || !v->allocation_bitmap || block>=v->allocation_blocks ||
+        (block>>3u)>=v->bitmap_bytes) return IFS_FS_CORRUPT;
+    return (v->allocation_bitmap[block>>3u] &
+            (0x80u>>(block&7u))) ? IFS_FS_OK : IFS_FS_CORRUPT;
+}
+void hfs_catalogue_close_v2(HfsCatalogueV2 *v)
+{
+    if (!v) return;
+    if (v->allocation_bitmap && v->host)
+        v->host->release(v->host->context,v->allocation_bitmap);
+    memset(v,0,sizeof(*v));
 }
 static int check_allocated_extents(const HfsCatalogueV2 *v,
                                    const HfsExtentV2 ext[3],
@@ -131,10 +134,25 @@ int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *host, HfsCatalogueV2 *v)
         v->catalogue_extents[i].block_start=be16(mdb+150u+4u*i);
         v->catalogue_extents[i].block_count=be16(mdb+152u+4u*i);
     }
+    v->bitmap_bytes=(v->allocation_blocks+7u)/8u;
+    v->allocation_bitmap=host->allocate(host->context,v->bitmap_bytes);
+    if (!v->allocation_bitmap) return IFS_FS_NO_MEMORY;
+    const uint64_t bitmap_offset=(uint64_t)be16(mdb+14u)*512u;
+    rc=media_read(host,bitmap_offset,v->allocation_bitmap,v->bitmap_bytes);
+    if (rc!=IFS_FS_OK) {
+        hfs_catalogue_close_v2(v);
+        return rc;
+    }
     rc=check_allocated_extents(v,v->catalogue_extents,v->catalogue_size);
-    if (rc!=IFS_FS_OK) return rc;
+    if (rc!=IFS_FS_OK) {
+        hfs_catalogue_close_v2(v);
+        return rc;
+    }
     rc=tree_read(v,0u,header,sizeof(header));
-    if (rc!=IFS_FS_OK) return rc;
+    if (rc!=IFS_FS_OK) {
+        hfs_catalogue_close_v2(v);
+        return rc;
+    }
     if (header[8]!=1u || be16(header+10u)<1u)
         return IFS_FS_CORRUPT;
     v->node_bytes=be16(header+32u);
@@ -144,8 +162,10 @@ int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *host, HfsCatalogueV2 *v)
         (v->node_bytes&(v->node_bytes-1u)) ||
         !v->node_count ||
         (uint64_t)v->node_count*v->node_bytes>v->catalogue_size ||
-        (v->first_leaf && v->first_leaf>=v->node_count))
+        (v->first_leaf && v->first_leaf>=v->node_count)) {
+        hfs_catalogue_close_v2(v);
         return IFS_FS_CORRUPT;
+    }
     return IFS_FS_OK;
 }
 static int parse_entry(const uint8_t *node, uint32_t size,
