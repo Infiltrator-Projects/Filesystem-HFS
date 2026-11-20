@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
- * Classic HFS provider: strict Common V2 read-only probe, mount and volume
- * reporting over the validated on-media Master Directory Block (MDB).
- * File writes, recovery and relocation are deliberately NOT advertised.
+ * Classic HFS Common V2 native reader: validated MDB/bitmap, genuine catalog
+ * B-tree lookup, directory enumeration and checked read-only data forks.
+ * Hosted and freestanding profiles share the same format-owned implementation.
+ * Writes, recovery and relocation are not advertised.
  */
 #include <infiltratr/filesystem_module_v2.h>
 #include "hfs_catalog_v2.h"
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 static uint16_t be16(const unsigned char *p)
 {
@@ -125,7 +127,13 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
     if (!slot || next_token==UINTPTR_MAX) return IFS_FS_BUSY;
     int rc=examine(host,&variant,&measured);
     if (rc!=IFS_FS_OK) return rc;
-    slot->host=*host;
+    /* The Common V2 host structure is size-versioned. Copy only the
+     * caller-supplied prefix; never read unowned extension bytes. */
+    memset(&slot->host,0,sizeof(slot->host));
+    size_t host_bytes=host->structure_bytes<sizeof(slot->host)?
+        host->structure_bytes:sizeof(slot->host);
+    memcpy(&slot->host,host,host_bytes);
+    slot->host.structure_bytes=(uint32_t)host_bytes;
     slot->info=measured;
     rc=hfs_catalogue_open_v2(&slot->host,&slot->catalog);
     if (rc!=IFS_FS_OK) return rc;
