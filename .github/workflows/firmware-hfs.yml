@@ -49,3 +49,29 @@ jobs:
           cmp build/HFS.so "$module"
           "$validator" "$module"
           echo HFS_REAL_NATIVE_FREESTANDING_AND_PACKAGED_VALIDATOR_PASS
+      - name: Prove real EFI-stub Linux kernel and initramfs reads through HFS.so in OVMF
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends \
+            cpio busybox-static dosfstools gdisk mtools qemu-system-x86 ovmf
+          kernel_package=$(apt-cache depends linux-image-generic |
+            awk '/Depends: linux-image-[0-9]/ { image=$2 } END { print image }')
+          test -n "$kernel_package"
+          release=${kernel_package#linux-image-}
+          (cd "$RUNNER_TEMP" && apt-get download "linux-image-unsigned-$release")
+          dpkg-deb -x "$RUNNER_TEMP"/linux-image-unsigned-*.deb "$RUNNER_TEMP/kernel"
+          kernel="$RUNNER_TEMP/kernel/boot/vmlinuz-$release"
+          test -s "$kernel"
+          boot="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/EFI/BOOT/BOOTX64.EFI"
+          module="$RUNNER_TEMP/install/System/Filesystems/HFS.so"
+          bash tests/firmware-hfs.sh "$boot" "$module" "$kernel" \
+            "$RUNNER_TEMP/hfs-boot"
+          bash tests/firmware-hfs.sh "$boot" "$module" "$kernel" \
+            "$RUNNER_TEMP/hfs-corrupt" bad-superblock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hfs-ovmf-serial
+          path: '**/serial.log'
+          if-no-files-found: warn
