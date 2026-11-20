@@ -20,7 +20,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/version.h"
 
 # Production ships just Common V2 and its real hosted on-disk geometry reader.
 # Historical workers and V1 host callbacks are not part of the runtime ELF.
-add_library(hfs-driver SHARED module/hfs_module.c)
+add_library(hfs-driver SHARED module/hfs_module.c native/hfs_catalog_v2.c)
 set_target_properties(hfs-driver PROPERTIES
   PREFIX "" OUTPUT_NAME "HFS" SUFFIX ".so"
   C_VISIBILITY_PRESET hidden)
@@ -30,7 +30,8 @@ target_link_options(hfs-driver PRIVATE
   -Wl,-z,defs
   "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/module/v2-only.map")
 target_include_directories(hfs-driver PRIVATE
-  "${infiltratr_common_SOURCE_DIR}/include")
+  "${infiltratr_common_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/native")
 target_link_libraries(hfs-driver PRIVATE InfiltratrCommon::Common)
 
 if(BUILD_TESTING)
@@ -39,6 +40,7 @@ if(BUILD_TESTING)
     native/writer.c
     compat/legacy_services.c
     module/hfs_module.c
+    native/hfs_catalog_v2.c
     fixtures/hfs_codec.c
     module/hfs_fixture_bridge.c)
   set_source_files_properties(fixtures/hfs_codec.c PROPERTIES COMPILE_DEFINITIONS "ldtm_raw_mac=ifs_hfs_raw_fixture")
