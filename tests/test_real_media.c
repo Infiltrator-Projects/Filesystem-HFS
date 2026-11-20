@@ -100,8 +100,37 @@ int main(int argc,char **argv)
     for(uint32_t i=0;i<1024u;++i) {
         int rc=core->directory_entry(volume,"/",i,&entry);
         if(rc==IFS_FS_END){found_end=1;break;}
-        if(rc!=IFS_FS_OK)
+        if(rc!=IFS_FS_OK) {
             fprintf(stderr,"HFS list index=%u rc=%d\n",i,rc);
+            uint8_t mdb[512]={0},head[512]={0},node[512]={0};
+            VERIFY(pread(device.fd,mdb,512,1024)==512);
+            uint32_t physical=((uint32_t)mdb[28]<<8|mdb[29])*512u;
+            uint32_t alloc=((uint32_t)mdb[20]<<24)|((uint32_t)mdb[21]<<16)|
+                           ((uint32_t)mdb[22]<<8)|mdb[23];
+            uint32_t first=((uint32_t)mdb[150]<<8)|mdb[151];
+            uint64_t pos=physical+(uint64_t)first*alloc;
+            VERIFY(pread(device.fd,head,512,(off_t)pos)==512);
+            uint32_t start=((uint32_t)head[24]<<24)|((uint32_t)head[25]<<16)|
+                           ((uint32_t)head[26]<<8)|head[27];
+            uint32_t node_size=((uint32_t)head[32]<<8)|head[33];
+            fprintf(stderr,"HFS tree catalog pos=%llu firstLeaf=%u nodeSize=%u headerKind=%u\n",
+                (unsigned long long)pos,start,node_size,head[8]);
+            if(node_size==512u) {
+                VERIFY(pread(device.fd,node,512,(off_t)(pos+start*node_size))==512);
+                unsigned count=(unsigned)node[10]*256u+node[11];
+                fprintf(stderr,"leaf kind=%u count=%u prev=%u\n",node[8],count,
+                    ((unsigned)node[4]<<24)|((unsigned)node[5]<<16)|
+                    ((unsigned)node[6]<<8)|node[7]);
+                for(unsigned k=0;k<count && k<6u;++k) {
+                    unsigned begin=(unsigned)node[510u-2u*k]*256u+node[511u-2u*k];
+                    unsigned finish=(unsigned)node[508u-2u*k]*256u+node[509u-2u*k];
+                    fprintf(stderr,"record[%u] begin=%u finish=%u keylen=%u namelen=%u kind_guess=%u\n",
+                        k,begin,finish,begin<512u?node[begin]:0,
+                        begin+6u<512u?node[begin+6u]:0,
+                        begin+8u<512u?node[begin+8u]:0);
+                }
+            }
+        }
         VERIFY(rc==IFS_FS_OK);
         if(!strcmp(name,"kernel.img"))found_kernel=1;
         if(!strcmp(name,"initramfs"))found_initrd=1;
