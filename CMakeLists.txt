@@ -85,6 +85,21 @@ if(BUILD_TESTING)
   target_link_libraries(hfs-historical-test-support PRIVATE
     InfiltratrCommon::Common OpenSSL::Crypto)
 
+  add_executable(hfs-real-media-test tests/test_real_media.c)
+  target_include_directories(hfs-real-media-test PRIVATE
+    "${infiltratr_common_SOURCE_DIR}/include")
+  target_compile_options(hfs-real-media-test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_link_libraries(hfs-real-media-test PRIVATE
+    hfs-driver InfiltratrCommon::Common)
+  option(HFS_REAL_MEDIA_TESTS "Test third-party formatted HFS media" OFF)
+  if(HFS_REAL_MEDIA_TESTS)
+    find_program(HFS_FORMAT_TOOL hformat REQUIRED)
+    find_program(HFS_COPY_TOOL hcopy REQUIRED)
+    add_test(NAME hfs-common-v2-independent-real-media
+      COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/real-hfs-v2.sh"
+        "$<TARGET_FILE:hfs-real-media-test>")
+  endif()
+
   add_executable(hfs-module-test tests/test_module.c)
   target_include_directories(hfs-module-test PRIVATE
     "${infiltratr_common_SOURCE_DIR}/include")
