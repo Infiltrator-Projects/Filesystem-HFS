@@ -20,5 +20,25 @@ sha256sum "$image" > "$work/original.sha256"
 cp "$image" "$work/invalid.img"
 printf '\000\000' | dd of="$work/invalid.img" bs=1 seek=1024 conv=notrunc status=none
 "$test_app" "$work/invalid.img" "$work/kernel-payload" "$work/initrd-payload" --reject
+# Use the native MDB fields to find the first catalog leaf. Corrupt only
+# its leading key length, leaving the valid superblock and allocation bitmap.
+read -r a b < <(od -An -tu1 -j 1052 -N2 "$image")
+alloc_start=$(((a*256+b)*512))
+read -r a b c d < <(od -An -tu1 -j 1044 -N4 "$image")
+alloc_bytes=$(((a<<24)+(b<<16)+(c<<8)+d))
+read -r a b < <(od -An -tu1 -j 1174 -N2 "$image")
+catalogue=$((alloc_start+(a*256+b)*alloc_bytes))
+read -r a b c d < <(od -An -tu1 -j $((catalogue+24)) -N4 "$image")
+first_leaf=$(((a<<24)+(b<<16)+(c<<8)+d))
+read -r a b < <(od -An -tu1 -j $((catalogue+32)) -N2 "$image")
+node_bytes=$((a*256+b))
+test "$first_leaf" -gt 0
+test "$node_bytes" -ge 512
+test "$node_bytes" -le 32768
+cp "$image" "$work/invalid-catalog.img"
+printf '\377' | dd of="$work/invalid-catalog.img" bs=1 \
+  seek=$((catalogue+first_leaf*node_bytes+14)) conv=notrunc status=none
+"$test_app" "$work/invalid-catalog.img" "$work/kernel-payload" \
+    "$work/initrd-payload" --corrupt-catalog
 (cd "$work" && sha256sum -c original.sha256)
 echo HFS_COMMON_V2_EXTERNAL_FORMAT_AND_READ_ONLY_NONMUTATION_PASS
