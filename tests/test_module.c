@@ -99,9 +99,17 @@ int main(void) {
           recheck.free_bytes==info.free_bytes &&
           recheck.total_bytes==info.total_bytes);
     {
-        void *duplicate=NULL;
-        CHECK(core->mount(&host,&duplicate,&recheck)==IFS_FS_BUSY);
-        CHECK(duplicate==NULL);
+        void *parallel_volume=NULL;
+        IfsFsVolumeInfoV2 parallel={.structure_bytes=sizeof(parallel)};
+        CHECK(core->mount(&host,&parallel_volume,&parallel)==IFS_FS_OK &&
+              parallel_volume && parallel_volume!=mounted);
+        CHECK(parallel.total_bytes==info.total_bytes &&
+              parallel.free_bytes==info.free_bytes);
+        parallel.structure_bytes=sizeof(parallel);
+        CHECK(ops->query(parallel_volume,&parallel)==IFS_FS_OK);
+        CHECK(core->unmount(parallel_volume)==IFS_FS_OK);
+        parallel.structure_bytes=sizeof(parallel);
+        CHECK(ops->query(parallel_volume,&parallel)==IFS_FS_INVALID);
     }
     CHECK(core->unmount(mounted)==IFS_FS_OK);
     CHECK(core->unmount(stale)==IFS_FS_INVALID);
