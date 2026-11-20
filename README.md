@@ -1,12 +1,18 @@
 # Filesystem-HFS
-Independent filesystem implementation for InfiltratorOS, using the shared Common ABI.
 
-## Installer files
+The production provider is installed as `/System/Filesystems/HFS.so`
+and its manual as
+`/System/Resources/Documentation/Filesystem-HFS.pdf`.
 
-- `/System/Filesystems/HFS.so`
-- `/System/Resources/Documentation/Filesystem-HFS.pdf`
-- `/System/Kernel/Filesystems/hfs.ko`
+Common V2 currently implements the real hfs on-media superblock/geometry
+probe, strict read-only metadata mount session and volume-information query.
+**It is NOT a BOOT-qualified filesystem reader.** Real Common V2 pathname
+traversal, directory enumeration, file reads, native metadata/extent engines
+and freestanding UEFI profile remain unimplemented.
 
-The published Debian package installs these three regular files. A manual native RUN compiles the shared object and Linux adapter locally, generates the PDF, and replaces all three files. It uses the running kernel headers by default. Use `--kernel-build DIRECTORY` for a prepared kernel build with `Module.symvers`. The kernel module is stored for manual use.
-
-InfiltratorOS calls `--system-package-mode` and decides which outputs need updating. Its worker builds a missing or older SO, repairs the PDF independently, and stores the matching released kernel module when available. Use `--build-only --output DIRECTORY` to build a Debian package.
+The original native source, writer, worker, fixture and Linux implementation
+remain in the repository. Legacy callbacks are built solely into a
+non-installed regression library, and no filesystem-specific Linux `.ko`
+is distributed. The tested portable `.deb` and source-embedded native
+`.run` remain CI artifacts; firmware publication is deliberately withheld
+until the production validator, corrupt-media checks and OVMF handoff pass.

@@ -1,10 +1,1 @@
-{
-  "name": "hfs",
-  "directory": "native/filesystems/hfs/linux",
-  "paths": [
-    "native/filesystems/hfs"
-  ],
-  "make_args": [
-    "CONFIG_HFS_FS=m"
-  ]
-}
+null

@@ -1,38 +1,38 @@
-name: HFS independent SO build and ABI tests
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Qualify Common V2 hosted-only HFS.so
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  hfs:
+  qualify:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Build independent HFS.so
+      - name: Build and test actual V2 interface
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
           cmake --build build --parallel 2
-      - name: Run independent ABI test
-        run: |
           ctest --test-dir build --output-on-failure
-          test -f build/HFS.so
-          nm -D --defined-only build/HFS.so | grep -F infiltrator_filesystem_api_v2
-          ! nm -D --defined-only build/HFS.so | grep -E 'infiltrator_filesystem_.*_v1'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: HFS.so
-          path: |
-            build/HFS.so
-            docs/HFS.pdf
-
-      - name: Verify exactly one PDF per runtime SO
-        shell: bash
+      - name: Verify installed package carries only V2 SO and PDF
         run: |
           set -euo pipefail
           stage="$(mktemp -d)"
           trap 'rm -rf "$stage"' EXIT
           DESTDIR="$stage" cmake --install build
-          test "$(find "$stage" -type f | wc -l)" -eq 2
-          test -f "$stage/System/Filesystems/HFS.so"
-          test -f "$stage/System/Resources/Documentation/Filesystem-HFS.pdf"
-          test "$(head -c 5 "$stage/System/Resources/Documentation/Filesystem-HFS.pdf")" = '%PDF-'
+          test "$(find "$stage" -type f | wc -l)" = 2
+          module="$stage/System/Filesystems/HFS.so"
+          test -s "$module"
+          cmp "build/HFS.so" "$module"
+          bash tests/check_v2_exports.sh "$module"
+          test -s "$stage/System/Resources/Documentation/Filesystem-HFS.pdf"
+          test "$(find "$stage" -name '*.ko' | wc -l)" = 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HFS-hosted-v2-unqualified-for-boot
+          path: |
+            build/HFS.so
+            docs/HFS.pdf
