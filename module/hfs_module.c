@@ -198,7 +198,11 @@ static const IfsFsModuleApiV2 api={
     .abi_version=IFS_FS_COMMON_ABI_V2,
     .structure_bytes=sizeof(IfsFsModuleApiV2),
     .format_id="hfs",
+    #ifdef IFS_HFS_FIRMWARE_BUILD
+    .runtime_profiles=IFS_FS_PROFILE_FREESTANDING|IFS_FS_PROFILE_FIRMWARE,
+#else
     .runtime_profiles=IFS_FS_PROFILE_HOSTED,
+#endif
     .group_mask=IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME),
     .query_group=query

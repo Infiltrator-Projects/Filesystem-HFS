@@ -34,6 +34,33 @@ target_include_directories(hfs-driver PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/native")
 target_link_libraries(hfs-driver PRIVATE InfiltratrCommon::Common)
 
+# The freestanding HFS reader contains the identical native catalogue code.
+# Its complete no-import ELF is embedded in the installed hosted shared object.
+set(HFS_FIRMWARE_DIR "${CMAKE_CURRENT_BINARY_DIR}/firmware")
+set(HFS_FIRMWARE_ELF "${HFS_FIRMWARE_DIR}/HFS.so")
+add_custom_command(OUTPUT "${HFS_FIRMWARE_ELF}"
+  COMMAND "${CMAKE_COMMAND}" -S "${CMAKE_CURRENT_SOURCE_DIR}/module/firmware"
+    -B "${HFS_FIRMWARE_DIR}" -DCMAKE_BUILD_TYPE=Release
+    "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+    "-DCOMMON_INCLUDE_DIR=${infiltratr_common_SOURCE_DIR}/include"
+  COMMAND "${CMAKE_COMMAND}" --build "${HFS_FIRMWARE_DIR}" --parallel 2
+  DEPENDS module/firmware/CMakeLists.txt module/firmware/runtime.c
+    native/hfs_catalog_v2.c native/hfs_catalog_v2.h module/hfs_module.c
+    "${infiltratr_common_SOURCE_DIR}/include/infiltratr/filesystem_module_v2.h"
+  VERBATIM)
+add_custom_target(hfs-firmware-elf DEPENDS "${HFS_FIRMWARE_ELF}")
+if(NOT CMAKE_OBJCOPY)
+  find_program(CMAKE_OBJCOPY NAMES objcopy llvm-objcopy REQUIRED)
+endif()
+add_dependencies(hfs-driver hfs-firmware-elf)
+set_property(TARGET hfs-driver APPEND PROPERTY LINK_DEPENDS "${HFS_FIRMWARE_ELF}")
+add_custom_command(TARGET hfs-driver POST_BUILD
+  COMMAND "${CMAKE_OBJCOPY}" --add-section
+    ".infiltrator_boot=${HFS_FIRMWARE_ELF}"
+    --set-section-flags .infiltrator_boot=readonly
+    "$<TARGET_FILE:hfs-driver>"
+  VERBATIM)
+
 if(BUILD_TESTING)
   # Source retained and compiled for regression; never installed.
   add_library(hfs-historical-test-support SHARED
