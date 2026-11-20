@@ -30,6 +30,71 @@ static void be32(unsigned offset,uint32_t n) {
     media[offset+2]=(unsigned char)(n>>8);
     media[offset+3]=(unsigned char)n;
 }
+
+/* An on-disk classic-HFS volume with a genuine catalog node, two data forks,
+ * directory thread-free root and a nested directory. The catalog is read
+ * through the production Common V2 module, never a private fixture decoder. */
+static void catalog_record(unsigned at, uint32_t parent, const char *name,
+                           uint32_t id, int directory,
+                           uint16_t alloc_block, const char *payload)
+{
+    size_t length=strlen(name);
+    media[at]=(unsigned char)(6u+length);
+    be32(at+2u,parent);
+    media[at+6u]=(unsigned char)length;
+    memcpy(media+at+7u,name,length);
+    unsigned data=at+((unsigned)(length+8u)&~1u);
+    media[data]=(unsigned char)(directory?1u:2u);
+    if(directory) {
+        be32(data+6u,id);
+    } else {
+        size_t bytes=strlen(payload);
+        be32(data+20u,id);
+        be32(data+26u,(uint32_t)bytes);
+        be32(data+30u,4096u);
+        be16(data+74u,alloc_block);
+        be16(data+76u,1u);
+        memcpy(media+64u*512u+(unsigned)alloc_block*4096u,payload,bytes);
+    }
+}
+static void make_catalog(void)
+{
+    const unsigned tree=64u*512u,leaf=tree+512u;
+    /* drCTFlSize and drCTExtRec: catalogue fork is allocation block zero. */
+    be32(1024u+146u,1024u);
+    be16(1024u+150u,0u);
+    be16(1024u+152u,1u);
+    media[tree+8u]=1u; /* B-tree header node */
+    be16(tree+10u,1u);
+    be16(tree+14u,1u);  /* tree depth */
+    be32(tree+16u,1u);  /* root node */
+    be32(tree+20u,3u);  /* leaf records */
+    be32(tree+24u,1u);  /* first leaf */
+    be32(tree+28u,1u);  /* last leaf */
+    be16(tree+32u,512u); /* node size */
+    be16(tree+34u,37u); /* max classic HFS catalogue key */
+    be32(tree+36u,2u); /* total nodes */
+    media[leaf+8u]=0xffu; /* leaf */
+    media[leaf+9u]=1u;   /* leaf level */
+    be16(leaf+10u,3u);
+    catalog_record(leaf+14u,2u,"kernel.img",16u,0,1u,"REAL-HFS-KERNEL");
+    catalog_record(leaf+134u,2u,"Boot",17u,1,0u,"");
+    catalog_record(leaf+216u,17u,"initramfs",18u,0,2u,"REAL-HFS-INITRD");
+    be16(leaf+510u,14u);
+    be16(leaf+508u,134u);
+    be16(leaf+506u,216u);
+    be16(leaf+504u,334u);
+}
+static uint64_t media_hash(void)
+{
+    uint64_t hash=UINT64_C(14695981039346656037);
+    for(size_t i=0;i<SIZE;++i) {
+        hash^=media[i];
+        hash*=UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
 #define CHECK(x) do {if(!(x)) {fprintf(stderr,"HFS V2 failure: %s line %d\n",#x,__LINE__);return 1;}}while(0)
 /* Valid writable-host callbacks: provider must refuse before using them. */
 static int forbidden_write(void *ctx,uint64_t at,const void *src,uint32_t n)
@@ -44,7 +109,9 @@ int main(void) {
                             IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)));
     const IfsFsCoreOpsV2 *core=(const IfsFsCoreOpsV2 *)ifs_fs_group_v2(api,IFS_FS_GROUP_CORE);
     const IfsFsVolumeOpsV2 *ops=(const IfsFsVolumeOpsV2 *)ifs_fs_group_v2(api,IFS_FS_GROUP_VOLUME);
-    CHECK(core && core->header.capabilities==(IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT));
+    CHECK(core && core->header.capabilities==(IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT|
+               IFS_FS_CORE_STAT|IFS_FS_CORE_LIST|IFS_FS_CORE_READ));
+    CHECK(core->stat && core->directory_entry && core->read);
     CHECK(core->probe && core->mount && core->unmount && !core->write);
     CHECK(ops && ops->header.capabilities==IFS_FS_VOLUME_QUERY &&
           ops->query && !ops->format && !ops->repair);
@@ -73,6 +140,7 @@ int main(void) {
     for(unsigned bit=0u;bit<60u;++bit)
         media[3u*512u+(bit>>3u)] |=
             (unsigned char)(0x80u>>(bit&7u));
+    make_catalog();
     CHECK(core->probe(&host,&variant)==IFS_FS_OK && variant==1u);
     media[3u*512u]^=0x80u; /* MDB unchanged: must reject disagreement */
     CHECK(core->probe(&host,&variant)==IFS_FS_CORRUPT);
@@ -94,6 +162,32 @@ int main(void) {
     CHECK(info.variant==1u && info.block_bytes==4096u &&
           info.total_bytes==409600u && info.free_bytes==163840u &&
           info.max_name_bytes==31u);
+    {
+        char name[128]={0},bytes[32]={0};
+        IfsFsEntryV2 entry={.structure_bytes=sizeof(entry),.name=name,
+                            .name_capacity=sizeof(name)};
+        uint64_t before=media_hash();
+        CHECK(core->stat(mounted,"/",&entry)==IFS_FS_OK &&
+              entry.type==IFS_FS_ENTRY_DIRECTORY);
+        CHECK(core->stat(mounted,"/kernel.img",&entry)==IFS_FS_OK &&
+              entry.type==IFS_FS_ENTRY_FILE &&
+              entry.size_bytes==strlen("REAL-HFS-KERNEL"));
+        CHECK(core->directory_entry(mounted,"/",0u,&entry)==IFS_FS_OK &&
+              !strcmp(name,"kernel.img"));
+        CHECK(core->directory_entry(mounted,"/",1u,&entry)==IFS_FS_OK &&
+              !strcmp(name,"Boot") && entry.type==IFS_FS_ENTRY_DIRECTORY);
+        CHECK(core->directory_entry(mounted,"/",2u,&entry)==IFS_FS_END);
+        CHECK(core->stat(mounted,"/Boot/initramfs",&entry)==IFS_FS_OK &&
+              entry.type==IFS_FS_ENTRY_FILE);
+        CHECK(core->read(mounted,"/Boot/initramfs",0u,bytes,15u)==IFS_FS_OK &&
+              !memcmp(bytes,"REAL-HFS-INITRD",15u));
+        CHECK(core->read(mounted,"/kernel.img",5u,bytes,3u)==IFS_FS_OK &&
+              !memcmp(bytes,"HFS",3u));
+        CHECK(core->stat(mounted,"/absent",&entry)==IFS_FS_NOT_FOUND);
+        CHECK(core->read(mounted,"/Boot/../kernel.img",0u,bytes,1u)
+              ==IFS_FS_INVALID);
+        CHECK(media_hash()==before);
+    }
     recheck.structure_bytes=sizeof(recheck);
     CHECK(ops->query(mounted,&recheck)==IFS_FS_OK &&
           recheck.free_bytes==info.free_bytes &&
