@@ -4,7 +4,7 @@
  * File writes, recovery and relocation are deliberately NOT advertised.
  */
 #include <infiltratr/filesystem_module_v2.h>
-#include <infiltratr/filesystem_ro_sessions_v2.h>
+#include "hfs_catalog_v2.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -91,39 +91,92 @@ static int probe(const IfsFsHostRuntimeV2 *host, uint32_t *variant)
 {
     return examine(host, variant, NULL);
 }
-/* Separate independent, generation-bound V2 session handles per volume.
- * Handles are never reused, allowing stale queries to fail closed. */
-static IfsFsReadOnlySessionsV2 sessions = IFS_FS_RO_SESSIONS_INIT_V2;
+/* Stable, non-recycled mount handles and independent per-volume B-tree
+ * state. No pointer to caller stack data survives a successful mount. */
+#define HFS_MAX_MOUNTS 32u
+typedef struct {
+    uintptr_t token;
+    IfsFsHostRuntimeV2 host;
+    IfsFsVolumeInfoV2 info;
+    HfsCatalogueV2 catalog;
+} HfsMount;
+static HfsMount mounts[HFS_MAX_MOUNTS];
+static uintptr_t next_token;
+static HfsMount *get_mount(void *handle)
+{
+    uintptr_t token=(uintptr_t)handle;
+    if (!token) return NULL;
+    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
+        if (mounts[i].token==token) return &mounts[i];
+    return NULL;
+}
 static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
                         IfsFsVolumeInfoV2 *info)
 {
-    IfsFsVolumeInfoV2 measured = {0};
-    uint32_t variant = 0u;
-    int result;
-    if (!volume || !info || info->structure_bytes < sizeof(*info))
-        return IFS_FS_INVALID;
-    *volume = NULL;
-    if (!ifs_fs_host_v2_valid(host))
-        return IFS_FS_INVALID;
-    if (!(host->capabilities & IFS_FS_HOST_READ_ONLY))
-        return IFS_FS_ACCESS;
-    result = examine(host, &variant, &measured);
-    if (result != IFS_FS_OK) return result;
-    return ifs_fs_ro_session_open_v2(&sessions, &measured, volume, info);
+    IfsFsVolumeInfoV2 measured={0};
+    HfsMount *slot=NULL;
+    uint32_t variant=0u;
+    if (!volume || !info || info->structure_bytes<sizeof(*info) ||
+        !ifs_fs_host_v2_valid(host)) return IFS_FS_INVALID;
+    *volume=NULL;
+    if (!(host->capabilities&IFS_FS_HOST_READ_ONLY)) return IFS_FS_ACCESS;
+    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
+        if (!mounts[i].token){slot=&mounts[i];break;}
+    if (!slot || next_token==UINTPTR_MAX) return IFS_FS_BUSY;
+    int rc=examine(host,&variant,&measured);
+    if (rc!=IFS_FS_OK) return rc;
+    slot->host=*host;
+    slot->info=measured;
+    rc=hfs_catalogue_open_v2(&slot->host,&slot->catalog);
+    if (rc!=IFS_FS_OK) return rc;
+    slot->token=++next_token;
+    *info=measured;
+    *volume=(void *)(uintptr_t)slot->token;
+    return IFS_FS_OK;
 }
 static int unmount_volume(void *volume)
 {
-    return ifs_fs_ro_session_close_v2(&sessions, volume);
+    HfsMount *slot=get_mount(volume);
+    if (!slot) return IFS_FS_INVALID;
+    slot->token=0u;
+    slot->catalog=(HfsCatalogueV2){0};
+    slot->host=(IfsFsHostRuntimeV2){0};
+    slot->info=(IfsFsVolumeInfoV2){0};
+    return IFS_FS_OK;
 }
 static int query_volume(void *volume, IfsFsVolumeInfoV2 *info)
 {
-    return ifs_fs_ro_session_query_v2(&sessions, volume, info);
+    HfsMount *slot=get_mount(volume);
+    if (!slot || !info || info->structure_bytes<sizeof(*info))
+        return IFS_FS_INVALID;
+    *info=slot->info;
+    return IFS_FS_OK;
+}
+static int stat_file(void *volume,const char *path,IfsFsEntryV2 *entry)
+{
+    HfsMount *slot=get_mount(volume);
+    return slot?hfs_catalogue_stat_v2(&slot->catalog,path,entry):IFS_FS_INVALID;
+}
+static int list_file(void *volume,const char *path,uint32_t index,
+                     IfsFsEntryV2 *entry)
+{
+    HfsMount *slot=get_mount(volume);
+    return slot?hfs_catalogue_list_v2(&slot->catalog,path,index,entry):IFS_FS_INVALID;
+}
+static int read_file(void *volume,const char *path,uint64_t offset,
+                     void *destination,uint32_t length)
+{
+    HfsMount *slot=get_mount(volume);
+    return slot?hfs_catalogue_read_v2(&slot->catalog,path,offset,destination,length):
+                IFS_FS_INVALID;
 }
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
              IFS_FS_GROUP_CORE,0u,
-             IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT},
-    .probe=probe,.mount=mount_volume,.unmount=unmount_volume
+             IFS_FS_CORE_PROBE|IFS_FS_CORE_MOUNT|
+             IFS_FS_CORE_STAT|IFS_FS_CORE_LIST|IFS_FS_CORE_READ},
+    .probe=probe,.mount=mount_volume,.unmount=unmount_volume,
+    .stat=stat_file,.directory_entry=list_file,.read=read_file
 };
 static const IfsFsVolumeOpsV2 volume_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
