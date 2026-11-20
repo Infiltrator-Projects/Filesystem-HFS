@@ -82,13 +82,25 @@ int main(int argc,char **argv)
     void *volume=NULL;
     IfsFsVolumeInfoV2 info={.structure_bytes=sizeof(info)};
     uint32_t variant=0;
-    if(argc==5) {
+    if(argc==5 && !strcmp(argv[4],"--reject")) {
         VERIFY(core->probe(&host,&variant)!=IFS_FS_OK ||
                core->mount(&host,&volume,&info)!=IFS_FS_OK);
         if(volume)VERIFY(core->unmount(volume)==IFS_FS_OK);
         VERIFY(close(device.fd)==0);
         return 0;
     }
+    if(argc==5 && !strcmp(argv[4],"--corrupt-catalog")) {
+        VERIFY(core->probe(&host,&variant)==IFS_FS_OK);
+        VERIFY(core->mount(&host,&volume,&info)==IFS_FS_OK && volume);
+        char filename[128]={0};
+        IfsFsEntryV2 item={.structure_bytes=sizeof(item),.name=filename,
+                            .name_capacity=sizeof(filename)};
+        VERIFY(core->directory_entry(volume,"/",0u,&item)==IFS_FS_CORRUPT);
+        VERIFY(core->unmount(volume)==IFS_FS_OK);
+        VERIFY(close(device.fd)==0);
+        return 0;
+    }
+    if(argc==5) return 2;
     VERIFY(core->probe(&host,&variant)==IFS_FS_OK);
     VERIFY(core->mount(&host,&volume,&info)==IFS_FS_OK && volume);
     char name[128]={0};
