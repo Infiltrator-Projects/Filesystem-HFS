@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Host V2 probe/mount only. No release until read-only V2 namespace,
-# freestanding ELF, unmodified BOOT validator and OVMF handoff pass.
-name: Qualify HFS hosted V2 without kernel fallback
+# Real native Common V2 HFS reader. Publish only exact-head signed package
+# hashes after native, freestanding, production validator and OVMF checks pass.
+name: Qualify and release HFS Common V2 BOOT-ready DEB and RUN
 on:
   push:
     branches: [main]
@@ -66,6 +66,80 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: HFS-hosted-v2-qualification-only
+          name: hfs-boot-qualified-release
           path: dist/*
           if-no-files-found: error
+  publish:
+    needs: qualify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: hfs-boot-qualified-release
+          path: dist
+      - name: Require same-head native Common V2 and actual OVMF handoff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          endpoint="repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100"
+          for attempt in $(seq 1 150); do
+            statuses=$(gh api "$endpoint" \
+              --jq '.workflow_runs[] | .name + ":" + (.conclusion // .status)')
+            if printf '%s\n' "$statuses" |
+                 grep -Fxq 'Qualify HFS native freestanding Common V2 ELF:failure' ||
+               printf '%s\n' "$statuses" |
+                 grep -Fxq 'Qualify Common V2 hosted-only HFS.so:failure'; then
+              echo "HFS same-head V2 or firmware/OVMF gate failed" >&2
+              exit 1
+            fi
+            if printf '%s\n' "$statuses" |
+                 grep -Fxq 'Qualify HFS native freestanding Common V2 ELF:success' &&
+               printf '%s\n' "$statuses" |
+                 grep -Fxq 'Qualify Common V2 hosted-only HFS.so:success'; then
+              echo "HFS_EXACT_HEAD_UEFI_NATIVE_PASS $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Exact-head HFS OVMF qualification not established" >&2
+          exit 1
+      - name: Publish immutable HFS V2 DEB and native RUN only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          version="$(tr -d '\r\n' < VERSION)"
+          tag="v$version"
+          test "$(find dist -maxdepth 1 -name '*.deb' | wc -l)" -eq 1
+          test "$(find dist -maxdepth 1 -name '*.run' | wc -l)" -eq 1
+          ! find dist -name '*.ko' | grep .
+          (cd dist && sha256sum -- *.deb *.run) > "$RUNNER_TEMP/hfs-hashes.txt"
+          if gh release view "$tag" --json tagName >/dev/null 2>&1; then
+            target=$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)
+            test "$target" = "$GITHUB_SHA" || {
+              echo "Existing immutable HFS release belongs to a different commit" >&2
+              exit 1
+            }
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "Unqualified existing HFS tag $tag" >&2
+            exit 1
+          else
+            gh release create "$tag" dist/*.deb dist/*.run \
+              --target "$GITHUB_SHA" \
+              --title "Classic HFS Common V2 freestanding reader $version" \
+              --notes "Exact packaged Common V2 HFS.so, no V1 or .ko. Independently formatted HFS real-media stat/list/read, bounded inline extents, validated metadata and source nonmutation; BOOT 0.1.77 unmodified validator on portable and native modules; disposable OVMF EFI Linux kernel/initramfs handoff and corrupt-media refusal. Unsupported catalogue features fail closed."
+          fi
+          mkdir -p "$RUNNER_TEMP/release-check"
+          gh release download "$tag" -p '*.deb' -p '*.run' \
+            --dir "$RUNNER_TEMP/release-check"
+          (cd "$RUNNER_TEMP/release-check" &&
+            sha256sum -c "$RUNNER_TEMP/hfs-hashes.txt")
+          echo "HFS_IMMUTABLE_RELEASE_PASS $tag $GITHUB_SHA"
