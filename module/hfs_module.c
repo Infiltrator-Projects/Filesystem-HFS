@@ -87,24 +87,28 @@ static int examine(const IfsFsHostRuntimeV2 *host,uint32_t *variant,
     }
     return IFS_FS_OK;
 }
-static int probe(const IfsFsHostRuntimeV2 *host,uint32_t *va/* Independent Common V2 read-only sessions, never a singleton. Each
- * opaque handle is generation-bound; freed handles are not reused. This
- * remains a metadata-only provider until genuine namespace I/O exists. */
+static int probe(const IfsFsHostRuntimeV2 *host, uint32_t *variant)
+{
+    return examine(host, variant, NULL);
+}
+/* Separate independent, generation-bound V2 session handles per volume.
+ * Handles are never reused, allowing stale queries to fail closed. */
 static IfsFsReadOnlySessionsV2 sessions = IFS_FS_RO_SESSIONS_INIT_V2;
 static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
                         IfsFsVolumeInfoV2 *info)
 {
     IfsFsVolumeInfoV2 measured = {0};
     uint32_t variant = 0u;
-    int rc;
+    int result;
     if (!volume || !info || info->structure_bytes < sizeof(*info))
         return IFS_FS_INVALID;
     *volume = NULL;
-    if (!ifs_fs_host_v2_valid(host)) return IFS_FS_INVALID;
+    if (!ifs_fs_host_v2_valid(host))
+        return IFS_FS_INVALID;
     if (!(host->capabilities & IFS_FS_HOST_READ_ONLY))
         return IFS_FS_ACCESS;
-    rc = examine(host, &variant, &measured);
-    if (rc != IFS_FS_OK) return rc;
+    result = examine(host, &variant, &measured);
+    if (result != IFS_FS_OK) return result;
     return ifs_fs_ro_session_open_v2(&sessions, &measured, volume, info);
 }
 static int unmount_volume(void *volume)
@@ -114,9 +118,6 @@ static int unmount_volume(void *volume)
 static int query_volume(void *volume, IfsFsVolumeInfoV2 *info)
 {
     return ifs_fs_ro_session_query_v2(&sessions, volume, info);
-}
-   *info=session.details;
-    return IFS_FS_OK;
 }
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
