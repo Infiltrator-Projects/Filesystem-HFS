@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Engineering gate for hosted/firmware single-SO profile. No release,
+# installed system, ESP, firmware variables or BOOT repository changes.
+name: Qualify HFS native freestanding Common V2 ELF
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hfs-firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native compiler and ELF tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git libssl-dev
+      - name: Compile actual source-owned HFS catalogue in firmware profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+          test -s build/firmware/HFS.so
+          test -s build/HFS.so
+          ! readelf -dW build/firmware/HFS.so | grep '(NEEDED)'
+          ! nm -u build/firmware/HFS.so | grep .
+          readelf -SW build/HFS.so | grep -F .infiltrator_boot
+          ! nm -D --defined-only build/HFS.so | grep -E 'infiltrator_filesystem_.*_v1'
+      - name: Check actual installed HFS.so using unmodified BOOT validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          boot=infiltrator-boot_0.1.77_amd64.deb
+          curl -fsSL --retry 3 \
+            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.77/$boot" \
+            -o "$RUNNER_TEMP/$boot"
+          printf '%s  %s\n' \
+            4b2fa8eaa116b7e719329c5bbaa39ee3a093fbe1c1eac0c57440d0f82217d8a5 \
+            "$RUNNER_TEMP/$boot" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/$boot" "$RUNNER_TEMP/boot"
+          validator="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/validate-module"
+          "$validator" build/firmware/HFS.so
+          DESTDIR="$RUNNER_TEMP/install" cmake --install build
+          module="$RUNNER_TEMP/install/System/Filesystems/HFS.so"
+          test -s "$module"
+          cmp build/HFS.so "$module"
+          "$validator" "$module"
+          echo HFS_REAL_NATIVE_FREESTANDING_AND_PACKAGED_VALIDATOR_PASS
