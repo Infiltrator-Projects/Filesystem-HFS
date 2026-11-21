@@ -28,8 +28,9 @@ static int examine(const IfsFsHostRuntimeV2 *host,uint32_t *variant,
     uint64_t bitmap_start,allocation,physical,bitmap_end;
     uint32_t block_bytes;
     uint16_t blocks,bitmap,first,free_blocks;
-    if(!variant || !ifs_fs_host_v2_valid(host))return IFS_FS_INVALID;
+    if(!variant)return IFS_FS_INVALID;
     *variant=0u;
+    if(!ifs_fs_host_v2_valid(host))return IFS_FS_INVALID;
     if(host->volume_bytes<1536u)return IFS_FS_NOT_FOUND;
     {
         /* The MDB is at byte 1024, not necessarily a sector boundary.
