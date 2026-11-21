@@ -4,7 +4,6 @@ file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" FILESYSTEM_VERSION LIMIT_COUN
 project(FilesystemHFS VERSION ${FILESYSTEM_VERSION} LANGUAGES C)
 include(CTest)
 include(FetchContent)
-find_package(OpenSSL REQUIRED)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -62,29 +61,6 @@ add_custom_command(TARGET hfs-driver POST_BUILD
   VERBATIM)
 
 if(BUILD_TESTING)
-  # Source retained and compiled for regression; never installed.
-  add_library(hfs-historical-test-support SHARED
-    native/writer.c
-    compat/legacy_services.c
-    module/hfs_module.c
-    native/hfs_catalog_v2.c
-    fixtures/hfs_codec.c
-    module/hfs_fixture_bridge.c)
-  set_source_files_properties(fixtures/hfs_codec.c PROPERTIES COMPILE_DEFINITIONS "ldtm_raw_mac=ifs_hfs_raw_fixture")
-  target_compile_definitions(hfs-historical-test-support PRIVATE
-    _GNU_SOURCE _FILE_OFFSET_BITS=64)
-  target_compile_options(hfs-historical-test-support PRIVATE
-    -Wall -Wextra -Wpedantic -Werror)
-  target_include_directories(hfs-historical-test-support PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/native"
-    "${CMAKE_CURRENT_SOURCE_DIR}/compat"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/include"
-    "${CMAKE_CURRENT_BINARY_DIR}"
-    "${infiltratr_common_SOURCE_DIR}/include")
-  target_link_libraries(hfs-historical-test-support PRIVATE
-    InfiltratrCommon::Common OpenSSL::Crypto)
-
   add_executable(hfs-real-media-test tests/test_real_media.c)
   target_include_directories(hfs-real-media-test PRIVATE
     "${infiltratr_common_SOURCE_DIR}/include")

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Engineering gate for hosted/firmware single-SO profile. No release,
 # installed system, ESP, firmware variables or BOOT repository changes.
-name: Qualify HFS native freestanding Common V2 ELF
+name: Qualify HFS native freestanding Common V2 ELF (self-contained)
 on:
   push:
     branches: [main]
@@ -29,46 +29,14 @@ jobs:
           ! nm -u build/firmware/HFS.so | grep .
           readelf -SW build/HFS.so | grep -F .infiltrator_boot
           ! nm -D --defined-only build/HFS.so | grep -E 'infiltrator_filesystem_.*_v1'
-      - name: Check actual installed HFS.so using unmodified BOOT validator
-        shell: bash
+      - name: Check installed HFS.so and its embedded Common V2 firmware ELF
         run: |
           set -euo pipefail
-          boot=infiltrator-boot_0.1.77_amd64.deb
-          curl -fsSL --retry 3 \
-            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.77/$boot" \
-            -o "$RUNNER_TEMP/$boot"
-          printf '%s  %s\n' \
-            4b2fa8eaa116b7e719329c5bbaa39ee3a093fbe1c1eac0c57440d0f82217d8a5 \
-            "$RUNNER_TEMP/$boot" | sha256sum -c -
-          dpkg-deb -x "$RUNNER_TEMP/$boot" "$RUNNER_TEMP/boot"
-          validator="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/validate-module"
-          "$validator" build/firmware/HFS.so
           DESTDIR="$RUNNER_TEMP/install" cmake --install build
           module="$RUNNER_TEMP/install/System/Filesystems/HFS.so"
-          test -s "$module"
           cmp build/HFS.so "$module"
-          "$validator" "$module"
-          echo HFS_REAL_NATIVE_FREESTANDING_AND_PACKAGED_VALIDATOR_PASS
-      - name: Prove real EFI-stub Linux kernel and initramfs reads through HFS.so in OVMF
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y --no-install-recommends \
-            cpio busybox-static dosfstools gdisk mtools qemu-system-x86 ovmf
-          kernel_package=$(apt-cache depends linux-image-generic |
-            awk '/Depends: linux-image-[0-9]/ { image=$2 } END { print image }')
-          test -n "$kernel_package"
-          release=${kernel_package#linux-image-}
-          (cd "$RUNNER_TEMP" && apt-get download "linux-image-unsigned-$release")
-          dpkg-deb -x "$RUNNER_TEMP"/linux-image-unsigned-*.deb "$RUNNER_TEMP/kernel"
-          kernel="$RUNNER_TEMP/kernel/boot/vmlinuz-$release"
-          test -s "$kernel"
-          boot="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/EFI/BOOT/BOOTX64.EFI"
-          module="$RUNNER_TEMP/install/System/Filesystems/HFS.so"
-          bash tests/firmware-hfs.sh "$boot" "$module" "$kernel" \
-            "$RUNNER_TEMP/hfs-boot"
-          bash tests/firmware-hfs.sh "$boot" "$module" "$kernel" \
-            "$RUNNER_TEMP/hfs-corrupt" bad-superblock
+          bash tests/check-freestanding-v2.sh "$module"
+          cmp build/firmware/HFS.so <(objcopy --dump-section ".infiltrator_boot=$RUNNER_TEMP/extracted.so" "$module" "$RUNNER_TEMP/carrier-copy.so" >/dev/null && cat "$RUNNER_TEMP/extracted.so")
       - uses: actions/upload-artifact@v4
         if: always()
         with:

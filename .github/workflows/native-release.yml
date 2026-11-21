@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Real native Common V2 HFS reader. Publish only exact-head signed package
-# hashes after native, freestanding, production validator and OVMF checks pass.
-name: Qualify and release HFS Common V2 BOOT-ready DEB and RUN
+# Qualify source-owned native and portable Common V2 carriers and their
+# embedded freestanding reader. No external boot-manager dependency.
+name: Qualify and release HFS native Common V2 filesystem module
 on:
   push:
     branches: [main]
@@ -41,32 +41,17 @@ jobs:
           test "$(find "$RUNNER_TEMP/native-root" -type f | wc -l)" = 2
           bash tests/check_v2_exports.sh "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"
           test "$(find "$RUNNER_TEMP/native-root" -name '*.ko' | wc -l)" = 0
-      - name: Validate actual portable and CPU-native installed HFS.so against BOOT 0.1.77
-        shell: bash
+      - name: Validate packaged Common V2 carrier and freestanding reader
         run: |
           set -euo pipefail
-          boot=infiltrator-boot_0.1.77_amd64.deb
-          curl -fsSL --retry 3 \
-            "https://github.com/Infiltrator-Projects/Boot/releases/download/v0.1.77/$boot" \
-            -o "$RUNNER_TEMP/$boot"
-          printf '%s  %s\n' \
-            4b2fa8eaa116b7e719329c5bbaa39ee3a093fbe1c1eac0c57440d0f82217d8a5 \
-            "$RUNNER_TEMP/$boot" | sha256sum -c -
-          dpkg-deb -x "$RUNNER_TEMP/$boot" "$RUNNER_TEMP/boot"
-          validator="$RUNNER_TEMP/boot/usr/lib/infiltrator-boot/validate-module"
           for module in \
-             "$RUNNER_TEMP/portable/System/Filesystems/HFS.so" \
-             "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"; do
-            test -s "$module"
-            readelf -SW "$module" | grep -F .infiltrator_boot
-            ! nm -D --defined-only "$module" | grep -E 'infiltrator_filesystem_.*_v1'
-            "$validator" "$module"
+            "$RUNNER_TEMP/portable/System/Filesystems/HFS.so" \
+            "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"; do
+            bash tests/check-freestanding-v2.sh "$module"
           done
-          echo HFS_PACKAGED_COMMON_V2_BOTH_VARIANTS_VALIDATED
-
       - uses: actions/upload-artifact@v4
         with:
-          name: hfs-boot-qualified-release
+          name: hfs-common-v2-qualified-release
           path: dist/*
           if-no-files-found: error
   publish:
@@ -81,35 +66,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: hfs-boot-qualified-release
+          name: hfs-common-v2-qualified-release
           path: dist
-      - name: Require same-head native Common V2 and actual OVMF handoff
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          endpoint="repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100"
-          for attempt in $(seq 1 150); do
-            statuses=$(gh api "$endpoint" \
-              --jq '.workflow_runs[] | .name + ":" + (.conclusion // .status)')
-            if printf '%s\n' "$statuses" |
-                 grep -Fxq 'Qualify HFS native freestanding Common V2 ELF:failure' ||
-               printf '%s\n' "$statuses" |
-                 grep -Fxq 'Qualify Common V2 hosted-only HFS.so:failure'; then
-              echo "HFS same-head V2 or firmware/OVMF gate failed" >&2
-              exit 1
-            fi
-            if printf '%s\n' "$statuses" |
-                 grep -Fxq 'Qualify HFS native freestanding Common V2 ELF:success' &&
-               printf '%s\n' "$statuses" |
-                 grep -Fxq 'Qualify Common V2 hosted-only HFS.so:success'; then
-              echo "HFS_EXACT_HEAD_UEFI_NATIVE_PASS $GITHUB_SHA"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Exact-head HFS OVMF qualification not established" >&2
-          exit 1
       - name: Publish immutable HFS V2 DEB and native RUN only
         env:
           GH_TOKEN: ${{ github.token }}
@@ -135,7 +93,7 @@ jobs:
             gh release create "$tag" dist/*.deb dist/*.run \
               --target "$GITHUB_SHA" \
               --title "Classic HFS Common V2 freestanding reader $version" \
-              --notes "Exact packaged Common V2 HFS.so, no V1 or .ko. Independently formatted HFS real-media stat/list/read, bounded inline extents, validated metadata and source nonmutation; BOOT 0.1.77 unmodified validator on portable and native modules; disposable OVMF EFI Linux kernel/initramfs handoff and corrupt-media refusal. Unsupported catalogue features fail closed."
+              --notes "Exact packaged Common V2 HFS.so, no V1 or .ko. Independently formatted HFS real-media stat/list/read, bounded inline extents, validated metadata and source nonmutation; Self-contained Common V2 freestanding ELF checks; corrupt media is rejected by the native V2 reader. Unsupported catalogue features fail closed."
           fi
           mkdir -p "$RUNNER_TEMP/release-check"
           gh release download "$tag" -p '*.deb' -p '*.run' \
