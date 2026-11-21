@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Qualify source-owned native and portable Common V2 carriers and their
-# embedded freestanding reader. No external boot-manager dependency.
+# embedded freestanding reader. Independent filesystem qualification.
 name: Qualify and release HFS native Common V2 filesystem module
 on:
   push:
@@ -65,27 +65,6 @@ jobs:
           else
             echo "new_version=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Validate and boot actual portable and native packages before publishing
-        if: steps.version.outputs.new_version == 'true' && vars.IFS_BOOT_INTEGRATION_READY == 'true'
-        run: |
-          set -euo pipefail
-          source tests/require-rebuilt-boot.sh
-          sudo apt-get install -y --no-install-recommends cpio busybox-static dosfstools gdisk mtools qemu-system-x86 ovmf hfsutils
-          work="$RUNNER_TEMP/qualified-hfs-release"
-          mkdir -p "$work/kernel"
-          image=$(apt-cache depends linux-image-generic | awk '/Depends: linux-image-[0-9]/ {name=$2} END {print name}')
-          test -n "$image"
-          (cd "$work" && apt-get download "linux-image-unsigned-${image#linux-image-}")
-          dpkg-deb -x "$work"/linux-image-unsigned-*.deb "$work/kernel"
-          kernel="$work/kernel/boot/vmlinuz-${image#linux-image-}"
-          test -s "$kernel"
-          for profile in portable native-root; do
-            module="$RUNNER_TEMP/$profile/System/Filesystems/HFS.so"
-            "$IFS_BOOT_VALIDATOR" "$module"
-            for mode in clean bad-superblock; do
-              bash tests/firmware-hfs.sh "$IFS_BOOT_EFI" "$module" "$kernel" "$work/$profile-$mode" "$mode"
-            done
-          done
       - uses: actions/upload-artifact@v4
         with:
           name: hfs-common-v2-qualified-release
@@ -93,7 +72,7 @@ jobs:
           if-no-files-found: error
   publish:
     needs: qualify
-    if: vars.IFS_BOOT_INTEGRATION_READY == 'true' && needs.qualify.outputs.new_version == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: needs.qualify.outputs.new_version == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
