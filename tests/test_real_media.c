@@ -11,7 +11,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-typedef struct { int fd; uint64_t bytes; } Device;
+typedef struct {
+    int fd;
+    uint64_t bytes;
+    size_t allocations, releases;
+} Device;
 extern const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void);
 #define VERIFY(e) do {if(!(e)){ \
  fprintf(stderr,"HFS real-media Common V2 failure line %d: %s\n",__LINE__,#e); \
@@ -24,9 +28,16 @@ static int read_at(void *ctx,uint64_t offset,void *dst,uint32_t n)
     return pread(d->fd,dst,n,(off_t)offset)==(ssize_t)n?0:-1;
 }
 static void *allocate(void *ctx,size_t count)
-{(void)ctx;return malloc(count);}
+{
+    void *p=malloc(count);
+    if(p)++((Device *)ctx)->allocations;
+    return p;
+}
 static void release(void *ctx,void *data)
-{(void)ctx;free(data);}
+{
+    if(data)++((Device *)ctx)->releases;
+    free(data);
+}
 static int compare_file(const IfsFsCoreOpsV2 *core,void *volume,
                         const char *hfs_path,const char *source_path)
 {
@@ -86,6 +97,18 @@ int main(int argc,char **argv)
         VERIFY(core->probe(&host,&variant)!=IFS_FS_OK ||
                core->mount(&host,&volume,&info)!=IFS_FS_OK);
         if(volume)VERIFY(core->unmount(volume)==IFS_FS_OK);
+        VERIFY(close(device.fd)==0);
+        return 0;
+    }
+    if(argc==5 && !strcmp(argv[4],"--corrupt-header")) {
+        /* The independently formatted image keeps a valid HFS MDB and
+         * allocation bitmap, but its B-tree header kind is deliberately
+         * damaged. The actual Common V2 mount must release host allocations
+         * on this rejection path rather than leak the verified bitmap. */
+        VERIFY(core->probe(&host,&variant)==IFS_FS_OK);
+        VERIFY(core->mount(&host,&volume,&info)==IFS_FS_CORRUPT && !volume);
+        VERIFY(device.allocations>0u);
+        VERIFY(device.allocations==device.releases);
         VERIFY(close(device.fd)==0);
         return 0;
     }
