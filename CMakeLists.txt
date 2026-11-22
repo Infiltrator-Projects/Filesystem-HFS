@@ -86,6 +86,17 @@ if(BUILD_TESTING)
   add_test(NAME hfs-production-only-v2
     COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_v2_exports.sh"
       "$<TARGET_FILE:hfs-driver>")
+  # Compile the identical HFS directory parser used by both Common V2
+  # profiles and refuse duplicate case-folded parent/name keys.
+  add_executable(hfs-duplicate-catalogue-test
+    tests/test_duplicate_catalogue.c)
+  target_include_directories(hfs-duplicate-catalogue-test PRIVATE
+    "${infiltratr_common_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/native")
+  target_compile_options(hfs-duplicate-catalogue-test PRIVATE
+    -Wall -Wextra -Wpedantic -Werror)
+  add_test(NAME hfs-v2-duplicate-catalogue-corruption
+    COMMAND hfs-duplicate-catalogue-test)
 endif()
 install(TARGETS hfs-driver LIBRARY DESTINATION /System/Filesystems)
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/docs/HFS.pdf"
