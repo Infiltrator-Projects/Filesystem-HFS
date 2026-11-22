@@ -39,10 +39,10 @@ test "$node_bytes" -le 32768
 # and allocation bitmap remain valid, so the reader must release its host
 # bitmap on the failed Common V2 MOUNT. Use a separate expendable image.
 cp --reflink=auto "$image" "$work/invalid-header.img"
-printf '\\000' | dd of="$work/invalid-header.img" bs=1 \\
+printf '\000' | dd of="$work/invalid-header.img" bs=1 \
   seek=$((catalogue+8)) conv=notrunc status=none
 sha256sum "$work/invalid-header.img" > "$work/header.sha256"
-"$test_app" "$work/invalid-header.img" "$work/kernel-payload" \\
+"$test_app" "$work/invalid-header.img" "$work/kernel-payload" \
     "$work/initrd-payload" --corrupt-header
 (cd "$work" && sha256sum -c header.sha256)
 cp "$image" "$work/invalid-catalog.img"
