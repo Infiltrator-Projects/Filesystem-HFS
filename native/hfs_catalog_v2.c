@@ -268,14 +268,25 @@ static int catalogue_scan(const HfsCatalogueV2 *v, Scan *scan)
             result=parse_entry(node,v->node_bytes,begin,finish,&record);
             if (result!=IFS_FS_OK) goto done;
             if (key_match(&record,scan)) {
-                if (scan->name || scan->encountered++==scan->ordinal) {
+                if (scan->name) {
+                    /* Classic HFS catalogue parent/filename keys must be
+                     * unique under the format's case-insensitive comparison.
+                     * Continue through following leaves before reporting a
+                     * successful pathname resolution. */
+                    if (scan->found) {result=IFS_FS_CORRUPT;goto done;}
+                    scan->result=record;scan->found=1;
+                } else if (scan->encountered++==scan->ordinal) {
                     scan->result=record;scan->found=1;
                     result=IFS_FS_OK;goto done;
                 }
             }
         }
         uint32_t next=be32(node);
-        if (!next) {result=IFS_FS_NOT_FOUND;goto done;}
+        if (!next) {
+            result=scan->name && scan->found ?
+                   IFS_FS_OK : IFS_FS_NOT_FOUND;
+            goto done;
+        }
         if (next>=v->node_count || next==current) {
             result=IFS_FS_CORRUPT;goto done;
         }
