@@ -153,8 +153,13 @@ int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *host, HfsCatalogueV2 *v)
         hfs_catalogue_close_v2(v);
         return rc;
     }
-    if (header[8]!=1u || be16(header+10u)<1u)
+    if (header[8]!=1u || be16(header+10u)<1u) {
+        /* The on-disk catalogue header is invalid, but the mount has
+         * already allocated its verified volume bitmap. Release that
+         * host-owned memory before refusing the Common V2 mount. */
+        hfs_catalogue_close_v2(v);
         return IFS_FS_CORRUPT;
+    }
     v->node_bytes=be16(header+32u);
     v->node_count=be32(header+36u);
     v->first_leaf=be32(header+24u);
