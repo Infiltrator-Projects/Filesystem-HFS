@@ -7,6 +7,7 @@
 #include <infiltratr/filesystem_module_v2.h>
 #include "hfs_catalog_v2.h"
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -99,19 +100,50 @@ static int probe(const IfsFsHostRuntimeV2 *host, uint32_t *variant)
 #define HFS_MAX_MOUNTS 32u
 typedef struct {
     uintptr_t token;
+    unsigned busy;
     IfsFsHostRuntimeV2 host;
     IfsFsVolumeInfoV2 info;
     HfsCatalogueV2 catalog;
 } HfsMount;
 static HfsMount mounts[HFS_MAX_MOUNTS];
 static uintptr_t next_token;
-static HfsMount *get_mount(void *handle)
+/* A short registry lock protects token allocation and exclusive per-volume
+ * operation leases. The lock is never held across host I/O. A busy volume
+ * returns BUSY rather than racing catalogue state or blocking a callback. */
+static atomic_flag registry_guard=ATOMIC_FLAG_INIT;
+static void lock_registry(void)
 {
-    uintptr_t token=(uintptr_t)handle;
-    if (!token) return NULL;
-    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
-        if (mounts[i].token==token) return &mounts[i];
-    return NULL;
+    while (atomic_flag_test_and_set_explicit(&registry_guard,memory_order_acquire)) {}
+}
+static void unlock_registry(void)
+{
+    atomic_flag_clear_explicit(&registry_guard,memory_order_release);
+}
+static int acquire_mount(void *handle,HfsMount **out)
+{
+    int rc=IFS_FS_INVALID;
+    *out=NULL;
+    if (!handle) return rc;
+    lock_registry();
+    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i) {
+        if (mounts[i].token!=(uintptr_t)handle) continue;
+        if (mounts[i].busy) rc=IFS_FS_BUSY;
+        else {
+            mounts[i].busy=1u;
+            *out=&mounts[i];
+            rc=IFS_FS_OK;
+        }
+        break;
+    }
+    unlock_registry();
+    return rc;
+}
+static int release_mount(HfsMount *slot,int rc)
+{
+    lock_registry();
+    slot->busy=0u;
+    unlock_registry();
+    return rc;
 }
 static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
                         IfsFsVolumeInfoV2 *info)
@@ -123,11 +155,23 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
         !ifs_fs_host_v2_valid(host)) return IFS_FS_INVALID;
     *volume=NULL;
     if (!(host->capabilities&IFS_FS_HOST_READ_ONLY)) return IFS_FS_ACCESS;
-    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
-        if (!mounts[i].token){slot=&mounts[i];break;}
-    if (!slot || next_token==UINTPTR_MAX) return IFS_FS_BUSY;
     int rc=examine(host,&variant,&measured);
     if (rc!=IFS_FS_OK) return rc;
+    lock_registry();
+    for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
+        if (!mounts[i].token && !mounts[i].busy) {
+            slot=&mounts[i];
+            break;
+        }
+    if (!slot || next_token==UINTPTR_MAX) {
+        unlock_registry();
+        return IFS_FS_BUSY;
+    }
+    /* Reserve the stable slot before opening the catalogue, but do not
+     * publish its token until the native reader has fully initialized. */
+    slot->busy=1u;
+    const uintptr_t token=++next_token;
+    unlock_registry();
     /* The Common V2 host structure is size-versioned. Copy only the
      * caller-supplied prefix; never read unowned extension bytes. */
     memset(&slot->host,0,sizeof(slot->host));
@@ -137,47 +181,64 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
     slot->host.structure_bytes=(uint32_t)host_bytes;
     slot->info=measured;
     rc=hfs_catalogue_open_v2(&slot->host,&slot->catalog);
-    if (rc!=IFS_FS_OK) return rc;
-    slot->token=++next_token;
+    if (rc!=IFS_FS_OK) {
+        slot->host=(IfsFsHostRuntimeV2){0};
+        slot->info=(IfsFsVolumeInfoV2){0};
+        return release_mount(slot,rc);
+    }
+    lock_registry();
+    slot->token=token;
+    slot->busy=0u;
     *info=measured;
-    *volume=(void *)(uintptr_t)slot->token;
+    *volume=(void *)token;
+    unlock_registry();
     return IFS_FS_OK;
 }
 static int unmount_volume(void *volume)
 {
-    HfsMount *slot=get_mount(volume);
-    if (!slot) return IFS_FS_INVALID;
-    slot->token=0u;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if (rc!=IFS_FS_OK) return rc;
     hfs_catalogue_close_v2(&slot->catalog);
     slot->host=(IfsFsHostRuntimeV2){0};
     slot->info=(IfsFsVolumeInfoV2){0};
+    lock_registry();
+    slot->token=0u;
+    slot->busy=0u;
+    unlock_registry();
     return IFS_FS_OK;
 }
-static int query_volume(void *volume, IfsFsVolumeInfoV2 *info)
+static int query_volume(void *volume,IfsFsVolumeInfoV2 *info)
 {
-    HfsMount *slot=get_mount(volume);
-    if (!slot || !info || info->structure_bytes<sizeof(*info))
-        return IFS_FS_INVALID;
+    HfsMount *slot;
+    if (!info || info->structure_bytes<sizeof(*info)) return IFS_FS_INVALID;
+    int rc=acquire_mount(volume,&slot);
+    if (rc!=IFS_FS_OK) return rc;
     *info=slot->info;
-    return IFS_FS_OK;
+    return release_mount(slot,IFS_FS_OK);
 }
 static int stat_file(void *volume,const char *path,IfsFsEntryV2 *entry)
 {
-    HfsMount *slot=get_mount(volume);
-    return slot?hfs_catalogue_stat_v2(&slot->catalog,path,entry):IFS_FS_INVALID;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if (rc!=IFS_FS_OK) return rc;
+    return release_mount(slot,hfs_catalogue_stat_v2(&slot->catalog,path,entry));
 }
 static int list_file(void *volume,const char *path,uint32_t index,
                      IfsFsEntryV2 *entry)
 {
-    HfsMount *slot=get_mount(volume);
-    return slot?hfs_catalogue_list_v2(&slot->catalog,path,index,entry):IFS_FS_INVALID;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if (rc!=IFS_FS_OK) return rc;
+    return release_mount(slot,hfs_catalogue_list_v2(&slot->catalog,path,index,entry));
 }
 static int read_file(void *volume,const char *path,uint64_t offset,
                      void *destination,uint32_t length)
 {
-    HfsMount *slot=get_mount(volume);
-    return slot?hfs_catalogue_read_v2(&slot->catalog,path,offset,destination,length):
-                IFS_FS_INVALID;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if (rc!=IFS_FS_OK) return rc;
+    return release_mount(slot,hfs_catalogue_read_v2(&slot->catalog,path,offset,destination,length));
 }
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),

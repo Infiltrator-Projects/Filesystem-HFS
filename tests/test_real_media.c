@@ -20,9 +20,18 @@ extern const IfsFsModuleApiV2 *infiltrator_filesystem_api_v2(void);
 #define VERIFY(e) do {if(!(e)){ \
  fprintf(stderr,"HFS real-media Common V2 failure line %d: %s\n",__LINE__,#e); \
  return 1;}}while(0)
+static const IfsFsCoreOpsV2 *unmount_during_read;
+static void *active_volume;
+static int observed_unmount;
 static int read_at(void *ctx,uint64_t offset,void *dst,uint32_t n)
 {
     Device *d=ctx;
+    if (unmount_during_read) {
+        const IfsFsCoreOpsV2 *ops=unmount_during_read;
+        unmount_during_read=NULL;
+        observed_unmount=ops->unmount(active_volume);
+        if (observed_unmount!=IFS_FS_BUSY) return -1;
+    }
     if (!n || (offset%512u)||(n%512u)||n>4096u ||
         offset>d->bytes || n>d->bytes-offset) return -1;
     return pread(d->fd,dst,n,(off_t)offset)==(ssize_t)n?0:-1;
@@ -58,7 +67,11 @@ static int compare_file(const IfsFsCoreOpsV2 *core,void *volume,
                        (uint32_t)((uint64_t)st.st_size-off):
                        (uint32_t)sizeof(actual);
         VERIFY(pread(fd,expected,count,(off_t)off)==(ssize_t)count);
+        active_volume=volume;
+        unmount_during_read=core;
+        observed_unmount=IFS_FS_INVALID;
         VERIFY(core->read(volume,hfs_path,off,actual,count)==IFS_FS_OK);
+        VERIFY(!unmount_during_read && observed_unmount==IFS_FS_BUSY);
         VERIFY(!memcmp(expected,actual,count));
         off+=count;
     }
