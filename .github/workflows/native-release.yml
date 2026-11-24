@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install portable and native toolchain
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git pkg-config libssl-dev libsqlite3-dev dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential binutils cmake git pkg-config libssl-dev libsqlite3-dev dpkg-dev hfsutils
       - name: Qualify portable DEB with actual V2 ELF
         run: |
           set -euo pipefail
@@ -50,6 +50,16 @@ jobs:
             "$RUNNER_TEMP/portable/System/Filesystems/HFS.so" \
             "$RUNNER_TEMP/native-root/System/Filesystems/HFS.so"; do
             bash tests/check-freestanding-v2.sh "$module"
+          done
+      - name: Independent HFS mount and file round-trip on both packaged formatters
+        run: |
+          set -euo pipefail
+          cmake -S . -B "$RUNNER_TEMP/format-check" -DBUILD_TESTING=ON
+          cmake --build "$RUNNER_TEMP/format-check" --target hfs-native-format-test --parallel 2
+          oracle=$(command -v hmount)
+          for profile in portable native-root; do
+            sh tests/format_oracle.sh "$RUNNER_TEMP/format-check/hfs-native-format-test" \
+              "$RUNNER_TEMP/$profile/System/Filesystems/HFS.so" "$oracle"
           done
       - name: Determine whether this version needs a new release
         id: version

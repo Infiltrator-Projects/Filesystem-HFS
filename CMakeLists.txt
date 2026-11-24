@@ -76,6 +76,17 @@ if(BUILD_TESTING)
         "$<TARGET_FILE:hfs-real-media-test>")
   endif()
 
+  add_executable(hfs-native-format-test tests/test_format.c)
+  target_link_libraries(hfs-native-format-test PRIVATE InfiltratrCommon::Common ${CMAKE_DL_LIBS})
+  target_compile_options(hfs-native-format-test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  find_program(HFS_FORMAT_ORACLE NAMES hmount)
+  if(HFS_FORMAT_ORACLE)
+    add_test(NAME hfs-native-format COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/format_oracle.sh"
+        "$<TARGET_FILE:hfs-native-format-test>" "$<TARGET_FILE:hfs-driver>" "${HFS_FORMAT_ORACLE}")
+  else()
+    add_test(NAME hfs-native-format COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/format_oracle.sh"
+        "$<TARGET_FILE:hfs-native-format-test>" "$<TARGET_FILE:hfs-driver>")
+  endif()
   add_executable(hfs-module-test tests/test_module.c)
   target_include_directories(hfs-module-test PRIVATE
     "${infiltratr_common_SOURCE_DIR}/include")

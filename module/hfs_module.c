@@ -107,6 +107,9 @@ typedef struct {
 } HfsMount;
 static HfsMount mounts[HFS_MAX_MOUNTS];
 static uintptr_t next_token;
+#ifndef IFS_HFS_FIRMWARE_BUILD
+static unsigned formatting;
+#endif
 /* A short registry lock protects token allocation and exclusive per-volume
  * operation leases. The lock is never held across host I/O. A busy volume
  * returns BUSY rather than racing catalogue state or blocking a callback. */
@@ -158,6 +161,9 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
     int rc=examine(host,&variant,&measured);
     if (rc!=IFS_FS_OK) return rc;
     lock_registry();
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    if(formatting){unlock_registry();return IFS_FS_BUSY;}
+#endif
     for (unsigned i=0;i<HFS_MAX_MOUNTS;++i)
         if (!mounts[i].token && !mounts[i].busy) {
             slot=&mounts[i];
@@ -248,10 +254,170 @@ static const IfsFsCoreOpsV2 core={
     .probe=probe,.mount=mount_volume,.unmount=unmount_volume,
     .stat=stat_file,.directory_entry=list_file,.read=read_file
 };
+#ifndef IFS_HFS_FIRMWARE_BUILD
+/* Classic HFS empty-volume creation. Use 512-byte logical B-tree nodes
+ * and a separately sized allocation heap. All media transfers go through
+ * the Common V2 lease, including 4Kn read-modify-write of the MDB.
+ * The bounded first profile uses printable MacRoman (ASCII subset). */
+enum { HFS_FMT_NODE=512u, HFS_FMT_HEAP=16384u, HFS_FMT_BITMAP=8192u };
+static void store16(uint8_t *p,uint32_t x)
+{p[0]=(uint8_t)(x>>8);p[1]=(uint8_t)x;}
+static void store32(uint8_t *p,uint32_t x)
+{store16(p,x>>16);store16(p+2,x);}
+static int format_write(const IfsFsHostRuntimeV2 *h,uint64_t at,const void *p,uint32_t n)
+{
+    if(h->cancelled && h->cancelled(h->context))return IFS_FS_BUSY;
+    return ifs_fs_host_write_bytes_v2(h,at,p,n);
+}
+static void format_tree(uint8_t *p,uint32_t nodes,int catalog)
+{
+    memset(p,0,HFS_FMT_NODE);
+    p[8]=1u;store16(p+10,3u);
+    if(catalog) {
+        store16(p+14,1u);store32(p+16,1u);store32(p+20,2u);
+        store32(p+24,1u);store32(p+28,1u);
+    }
+    store16(p+32,HFS_FMT_NODE);store16(p+34,catalog?37u:7u);
+    store32(p+36,nodes);store32(p+40,nodes-(catalog?2u:1u));
+    p[248]=catalog?0xc0u:0x80u;
+    store16(p+510,14u);store16(p+508,120u);
+    store16(p+506,248u);store16(p+504,504u);
+}
+static uint32_t format_key(uint8_t *p,uint32_t parent,const char *name,uint32_t n)
+{
+    /* The one-byte key length excludes itself, but each record's data
+     * begins on an even boundary. The reserved byte stays zero. */
+    p[0]=(uint8_t)(6u+n);store32(p+2,parent);p[6]=(uint8_t)n;
+    memcpy(p+7,name,n);
+    return (8u+n)&~1u;
+}
+static int format_impl(const IfsFsHostRuntimeV2 *h,const char *label)
+{
+    const uint64_t available=h->volume_bytes-HFS_FMT_HEAP-1024u;
+    uint32_t unit=4096u;
+    while(available/unit>UINT16_MAX)unit*=2u;
+    const uint32_t blocks=(uint32_t)(available/unit);
+    uint32_t n=(uint32_t)strlen(label),now=2082844800u;
+    if(h->realtime_ns) {
+        uint64_t t=h->realtime_ns(h->context)/1000000000ull;
+        if(t<=UINT32_MAX-2082844800u)now+=(uint32_t)t;
+    }
+    uint8_t *tree=h->allocate(h->context,unit);
+    if(!tree)return IFS_FS_NO_MEMORY;
+    uint8_t bitmap[HFS_FMT_BITMAP]={0},mdb[512]={0};
+    int rc;
+    /* Invalidate primary and alternate MDB before writing allocation
+     * records. Zero every reserved sector ahead of the allocation heap. */
+    for(uint32_t at=0u;at<HFS_FMT_HEAP;at+=sizeof(bitmap)) {
+        rc=format_write(h,at,bitmap,sizeof(bitmap));
+        if(rc!=IFS_FS_OK)goto done;
+    }
+    rc=format_write(h,h->volume_bytes-1024u,bitmap,1024u);
+    if(rc!=IFS_FS_OK)goto done;
+    if(h->flush(h->context)!=0){rc=IFS_FS_IO_ERROR;goto done;}
+
+    /* Allocation blocks zero and one own the extent and catalog trees.
+     * Reserve nonexistent bitmap positions so they cannot be allocated. */
+    bitmap[0]=0xc0u;
+    for(uint32_t bit=blocks;bit<HFS_FMT_BITMAP*8u;++bit)
+        bitmap[bit/8u]|=(uint8_t)(0x80u>>(bit%8u));
+    rc=format_write(h,1536u,bitmap,sizeof(bitmap));
+    if(rc!=IFS_FS_OK)goto done;
+    memset(tree,0,unit);
+    format_tree(tree,unit/HFS_FMT_NODE,0);
+    rc=format_write(h,HFS_FMT_HEAP,tree,unit);
+    if(rc!=IFS_FS_OK)goto done;
+    memset(tree,0,unit);
+    format_tree(tree,unit/HFS_FMT_NODE,1);
+    /* Two ordered catalogue records: root directory and its mandatory
+     * thread record. The classic folder structure is 70 bytes; the
+     * thread stores the parent's CNID followed by a Str31 name. */
+    uint8_t *leaf=tree+HFS_FMT_NODE;
+    leaf[8]=0xffu;leaf[9]=1u;store16(leaf+10,2u);
+    uint32_t at=14u;store16(leaf+510,at);
+    uint8_t *value=leaf+at+format_key(leaf+at,1u,label,n);
+    value[0]=1u;store32(value+6,2u);
+    store32(value+10,now);store32(value+14,now);
+    at=(uint32_t)(value-leaf)+70u;store16(leaf+508,at);
+    value=leaf+at+format_key(leaf+at,2u,"",0u);
+    value[0]=3u;store32(value+10,1u);
+    value[14]=(uint8_t)n;memcpy(value+15,label,n);
+    at=(uint32_t)(value-leaf)+46u;store16(leaf+506,at);
+    rc=format_write(h,HFS_FMT_HEAP+unit,tree,unit);
+    if(rc!=IFS_FS_OK)goto done;
+    if(h->flush(h->context)!=0){rc=IFS_FS_IO_ERROR;goto done;}
+
+    store16(mdb,0x4244u);store32(mdb+2,now);store32(mdb+6,now);
+    store16(mdb+10,0x100u);store16(mdb+14,3u);
+    store16(mdb+16,2u);store16(mdb+18,blocks);
+    store32(mdb+20,unit);store32(mdb+24,unit);
+    store16(mdb+28,HFS_FMT_HEAP/512u);store32(mdb+30,16u);
+    store16(mdb+34,blocks-2u);mdb[36]=(uint8_t)n;memcpy(mdb+37,label,n);
+    store32(mdb+70,1u);store32(mdb+74,unit);store32(mdb+78,unit);
+    store32(mdb+130,unit);store16(mdb+136,1u);
+    store32(mdb+146,unit);store16(mdb+150,1u);store16(mdb+152,1u);
+    rc=format_write(h,h->volume_bytes-1024u,mdb,sizeof(mdb));
+    if(rc!=IFS_FS_OK)goto done;
+    if(h->flush(h->context)!=0){rc=IFS_FS_IO_ERROR;goto done;}
+    rc=format_write(h,1024u,mdb,sizeof(mdb));
+    if(rc!=IFS_FS_OK)goto done;
+    if(h->flush(h->context)!=0) {
+        memset(mdb,0,sizeof(mdb));
+        (void)ifs_fs_host_write_bytes_v2(h,1024u,mdb,sizeof(mdb));
+        (void)ifs_fs_host_write_bytes_v2(h,h->volume_bytes-1024u,mdb,sizeof(mdb));
+        (void)h->flush(h->context);rc=IFS_FS_IO_ERROR;goto done;
+    }
+    uint32_t observed=0u;
+    rc=probe(h,&observed);
+    if(rc!=IFS_FS_OK)goto done;
+    if(observed!=1u){rc=IFS_FS_CORRUPT;goto done;}
+    HfsCatalogueV2 check;
+    rc=hfs_catalogue_open_v2(h,&check);
+    if(rc==IFS_FS_OK)hfs_catalogue_close_v2(&check);
+done:
+    h->release(h->context,tree);
+    return rc;
+}
+static int format_volume(const IfsFsHostRuntimeV2 *h,uint32_t variant,
+                          const char *label,uint32_t flags)
+{
+    if(!ifs_fs_host_v2_valid(h))return IFS_FS_INVALID;
+    if((h->capabilities&IFS_FS_HOST_READ_ONLY) ||
+       !(h->capabilities&IFS_FS_HOST_EXCLUSIVE) ||
+       !(h->capabilities&IFS_FS_HOST_DURABLE))return IFS_FS_ACCESS;
+    if(variant!=1u || flags || h->logical_sector_bytes>4096u ||
+       h->volume_bytes%4096u || h->volume_bytes<32ull*1024u*1024u ||
+       h->volume_bytes>2ull*1024u*1024u*1024u)return IFS_FS_UNSUPPORTED;
+    if(!label || !*label)label="Untitled";
+    const size_t n=strlen(label);
+    if(n>27u)return IFS_FS_INVALID;
+    for(size_t i=0u;i<n;++i)
+        if((unsigned char)label[i]<32u || (unsigned char)label[i]>126u ||
+           label[i]==':' || label[i]=='/')return IFS_FS_INVALID;
+    lock_registry();
+    if(formatting){unlock_registry();return IFS_FS_BUSY;}
+    for(unsigned i=0u;i<HFS_MAX_MOUNTS;++i)
+        if(mounts[i].token || mounts[i].busy) {
+            unlock_registry();return IFS_FS_BUSY;
+        }
+    formatting=1u;unlock_registry();
+    const int rc=format_impl(h,label);
+    lock_registry();formatting=0u;unlock_registry();
+    return rc;
+}
+#endif
+
 static const IfsFsVolumeOpsV2 volume_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
-             IFS_FS_GROUP_VOLUME,0u,IFS_FS_VOLUME_QUERY},
+             IFS_FS_GROUP_VOLUME,0u,IFS_FS_VOLUME_QUERY
+#ifndef IFS_HFS_FIRMWARE_BUILD
+             |IFS_FS_VOLUME_FORMAT
+#endif
+    },
     .query=query_volume
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    ,.format=format_volume
+#endif
 };
 static const IfsFsGroupHeaderV2 *query(
     uint32_t id,uint32_t minimum,uint32_t maximum)
