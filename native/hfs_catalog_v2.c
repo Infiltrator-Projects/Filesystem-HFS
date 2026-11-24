@@ -122,6 +122,10 @@ int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *host, HfsCatalogueV2 *v)
     int rc=media_read(host,1024u,mdb,sizeof(mdb));
     if (rc!=IFS_FS_OK) return rc;
     if (be16(mdb)!=0x4244u) return IFS_FS_NOT_FOUND;
+    /* drVN is a Pascal Str27, including a one-byte length. */
+    if(mdb[36]>27u)return IFS_FS_CORRUPT;
+    v->label_length=mdb[36];
+    memcpy(v->label,mdb+37u,v->label_length);
     v->allocation_start=(uint64_t)be16(mdb+28u)*512u;
     v->allocation_bytes=be32(mdb+20u);
     v->allocation_blocks=be16(mdb+18u);

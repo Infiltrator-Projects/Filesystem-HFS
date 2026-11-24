@@ -20,6 +20,7 @@ typedef struct {
     uint32_t node_bytes, node_count, first_leaf;
     uint8_t *allocation_bitmap;
     uint32_t bitmap_bytes;
+    uint8_t label[27],label_length;
 } HfsCatalogueV2;
 int hfs_catalogue_open_v2(const IfsFsHostRuntimeV2 *, HfsCatalogueV2 *);
 void hfs_catalogue_close_v2(HfsCatalogueV2 *);

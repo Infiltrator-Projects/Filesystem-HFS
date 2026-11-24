@@ -113,8 +113,8 @@ int main(void) {
                IFS_FS_CORE_STAT|IFS_FS_CORE_LIST|IFS_FS_CORE_READ));
     CHECK(core->stat && core->directory_entry && core->read);
     CHECK(core->probe && core->mount && core->unmount && !core->write);
-    CHECK(ops && ops->header.capabilities==(IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_FORMAT) &&
-          ops->query && ops->format && !ops->repair);
+    CHECK(ops && ops->header.capabilities==(IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_FORMAT|IFS_FS_VOLUME_LABEL_GET) &&
+          ops->query && ops->format && ops->label && !ops->set_label && !ops->repair);
     CHECK(!ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG));
     IfsFsHostRuntimeV2 host={0};
     host.abi_version=IFS_FS_HOST_ABI_V2;

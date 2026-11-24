@@ -407,14 +407,34 @@ static int format_volume(const IfsFsHostRuntimeV2 *h,uint32_t variant,
 }
 #endif
 
+/* Classic HFS has no universal Unicode label encoding. Qualify the
+ * ASCII subset rather than misreport a script-specific name as UTF-8. */
+static int volume_label(void *volume,char *out,uint32_t cap,uint32_t *bytes)
+{
+    if(!bytes)return IFS_FS_INVALID;
+    *bytes=0u;
+    if(!out || !cap)return IFS_FS_INVALID;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if(rc!=IFS_FS_OK)return rc;
+    uint32_t n=slot->catalog.label_length;
+    for(uint32_t i=0;i<n;++i) {
+        uint8_t c=slot->catalog.label[i];
+        if(c<32u || c==127u)return release_mount(slot,IFS_FS_CORRUPT);
+        if(c>=128u)return release_mount(slot,IFS_FS_UNSUPPORTED);
+    }
+    if(n>=cap)return release_mount(slot,IFS_FS_NO_SPACE);
+    memcpy(out,slot->catalog.label,n);out[n]=0;*bytes=n;
+    return release_mount(slot,IFS_FS_OK);
+}
 static const IfsFsVolumeOpsV2 volume_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsVolumeOpsV2),
-             IFS_FS_GROUP_VOLUME,0u,IFS_FS_VOLUME_QUERY
+             IFS_FS_GROUP_VOLUME,0u,IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_LABEL_GET
 #ifndef IFS_HFS_FIRMWARE_BUILD
              |IFS_FS_VOLUME_FORMAT
 #endif
     },
-    .query=query_volume
+    .query=query_volume,.label=volume_label
 #ifndef IFS_HFS_FIRMWARE_BUILD
     ,.format=format_volume
 #endif
