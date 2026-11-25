@@ -104,7 +104,19 @@ int main(int argc,char **argv)
         const int created=core->create(mount,path,IFS_FS_ENTRY_FILE);
         if(created!=IFS_FS_OK)fprintf(stderr,"HFS CORE.CREATE %s returned %d\n",path,created);
         CHECK(created==IFS_FS_OK);
-        CHECK(core->stat(mount,path,&entry)==IFS_FS_OK && entry.size_bytes==0u);
+        const int inspected=core->stat(mount,path,&entry);
+        if(inspected!=IFS_FS_OK)
+            fprintf(stderr,"HFS CORE.STAT %s returned %d after creation\n",path,inspected);
+        CHECK(inspected==IFS_FS_OK && entry.size_bytes==0u);
+        /* Cross-leaf traversal must preserve every older record, as well as
+         * the newly inserted record, when the catalogue grows an index. */
+        for(unsigned prior=0;prior<=file;++prior) {
+            char expected_name[16];
+            snprintf(expected_name,sizeof(expected_name),"F%06u.BIN",prior);
+            CHECK(core->directory_entry(mount,"/",prior,&entry)==IFS_FS_OK);
+            CHECK(!strcmp(entry.name,expected_name) && entry.size_bytes==0u);
+        }
+        CHECK(core->directory_entry(mount,"/",file+1u,&entry)==IFS_FS_END);
     }
     CHECK(core->create(mount,"/F000000.BIN",IFS_FS_ENTRY_FILE)==IFS_FS_EXISTS);
     for(unsigned phase=0;phase<2u;++phase)

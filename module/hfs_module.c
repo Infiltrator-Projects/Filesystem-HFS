@@ -436,7 +436,8 @@ static int rebuild_catalogue(HfsMutation *m)
         const uint32_t number=first+l;
         uint8_t *node=m->tree+number*512u;
         store32(node,l+1u<leaves?number+1u:0u);
-        store32(node,l?number-1u:0u);
+        /* The previous leaf belongs to bLink (offset 4), not fLink. */
+        store32(node+4u,l?number-1u:0u);
         node[8]=0xffu;node[9]=1u;
         store16(node+10u,counts[l]);
         uint32_t at=14u;
