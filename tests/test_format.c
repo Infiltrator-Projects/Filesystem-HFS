@@ -252,6 +252,21 @@ int main(int argc,char **argv)
             CHECK(map->recover(mount,0u,&repaired)==IFS_FS_OK && repaired==0u);
             CHECK(core->unmount(mount)==IFS_FS_OK);
             CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && info.free_bytes==expected_free);
+            const IfsFsAllocationOpsV2 *allocation=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_ALLOCATION);
+            CHECK(allocation && allocation->map);
+            uint64_t cursor=0u,unknown=0u,free_bytes=0u;
+            for(unsigned page=0u;;++page){
+                IfsFsAllocationRangeV2 ranges[8];uint32_t count=0u;uint64_t next=0u;
+                CHECK(page<65536u);
+                int status=allocation->map(mount,cursor,ranges,8u,&count);
+                CHECK(ifs_fs_allocation_page_v2_valid(h.volume_bytes,cursor,status,ranges,8u,count,&next,&unknown));
+                for(uint32_t k=0u;k<count;++k)
+                    if(ranges[k].state==IFS_FS_SPACE_FREE)free_bytes+=ranges[k].length;
+                cursor=next;
+                if(status==IFS_FS_END)break;
+            }
+            CHECK(cursor==h.volume_bytes && !unknown && free_bytes==expected_free);
+
             for(unsigned file=0;file<16u;++file) {
                 char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
                 CHECK(core->read(mount,path,0u,readback,sizeof(readback))==IFS_FS_OK &&

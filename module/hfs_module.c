@@ -816,6 +816,53 @@ done:
 }
 
 #include "hfs_relocation.h"
+/* Validate the complete supported native catalogue and bitmap before
+ * exposing allocator space, including the partition's non-data regions. */
+static int allocation_map(void *volume,uint64_t first,IfsFsAllocationRangeV2 *ranges,
+                          uint32_t capacity,uint32_t *written)
+{
+    if(!written)return IFS_FS_INVALID;
+    *written=0u;
+    HfsMount *slot;int rc=acquire_mount(volume,&slot);
+    if(rc!=IFS_FS_OK)return rc;
+    if(!ranges||!capacity||first>slot->host.volume_bytes)
+        return release_mount(slot,IFS_FS_INVALID);
+    if(slot->reloc_state!=1u || slot->mutation_fault)
+        return release_mount(slot,IFS_FS_UNSUPPORTED);
+    HfsMutation m={0};
+    rc=mutation_load(&m,slot);
+    if(rc!=IFS_FS_OK)goto done;
+    uint64_t base=slot->catalog.allocation_start,end=base+(uint64_t)m.blocks*m.unit,
+             limit=slot->host.volume_bytes,at=first;
+    if(end>limit){rc=IFS_FS_CORRUPT;goto done;}
+    if(at==limit){rc=IFS_FS_END;goto done;}
+    while(at<limit && *written<capacity){
+        if(hr_cancelled(&slot->host)){rc=IFS_FS_BUSY;goto done;}
+        uint64_t next;uint32_t state;
+        if(at<base){next=base;state=IFS_FS_SPACE_RESERVED;}
+        else if(at>=end){next=limit;state=IFS_FS_SPACE_RESERVED;}
+        else {
+            uint32_t block=(uint32_t)((at-base)/m.unit);
+            int used=used_block(m.bitmap,block);
+            state=used?IFS_FS_SPACE_ALLOCATED:IFS_FS_SPACE_FREE;
+            ++block;
+            while(block<m.blocks && used_block(m.bitmap,block)==used)++block;
+            next=base+(uint64_t)block*m.unit;
+        }
+        ranges[(*written)++]=(IfsFsAllocationRangeV2){at,next-at,state,0u};
+        at=next;
+    }
+done:
+    mutation_free(&m);
+    if(rc!=IFS_FS_OK)*written=0u;
+    return release_mount(slot,rc);
+}
+static const IfsFsAllocationOpsV2 allocation_group={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsAllocationOpsV2),
+             IFS_FS_GROUP_ALLOCATION,0u,IFS_FS_ALLOCATION_ALL},
+    .map=allocation_map
+};
+
 
 static int format_impl(const IfsFsHostRuntimeV2 *h,const char *label)
 {
@@ -978,6 +1025,9 @@ static const IfsFsGroupHeaderV2 *query(
     if(id==IFS_FS_GROUP_CORE)return &core.header;
     if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
     if(id==IFS_FS_GROUP_DEFRAG)return &defrag_ops.header;
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    if(id==IFS_FS_GROUP_ALLOCATION)return &allocation_group.header;
+#endif
     return NULL;
 }
 __attribute__((used,section(".ifsmeta")))
@@ -993,7 +1043,11 @@ static const IfsFsModuleApiV2 api={
 #endif
     .group_mask=IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
                 IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
-                IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG),
+                IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG)
+#ifndef IFS_HFS_FIRMWARE_BUILD
+                |IFS_FS_GROUP_BIT(IFS_FS_GROUP_ALLOCATION)
+#endif
+                ,
     .query_group=query
 };
 __attribute__((visibility("default")))
