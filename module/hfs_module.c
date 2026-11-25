@@ -248,6 +248,22 @@ static int read_file(void *volume,const char *path,uint64_t offset,
     if (rc!=IFS_FS_OK) return rc;
     return release_mount(slot,hfs_catalogue_read_v2(&slot->catalog,path,offset,destination,length));
 }
+static int map_file(void *volume,const char *path,uint64_t first,
+                    IfsFsExtentV2 *out,uint32_t capacity,uint32_t *count)
+{
+    if(!count)return IFS_FS_INVALID;
+    *count=0u;
+    HfsMount *slot;
+    int rc=acquire_mount(volume,&slot);
+    if(rc!=IFS_FS_OK)return rc;
+    return release_mount(slot,hfs_catalogue_map_v2(&slot->catalog,path,
+                         first,out,capacity,count));
+}
+static const IfsFsDefragOpsV2 defrag_ops={
+    .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsDefragOpsV2),
+             IFS_FS_GROUP_DEFRAG,0u,IFS_FS_DEFRAG_MAP},
+    .map=map_file
+};
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
              IFS_FS_GROUP_CORE,0u,
@@ -448,6 +464,7 @@ static const IfsFsGroupHeaderV2 *query(
         return NULL;
     if(id==IFS_FS_GROUP_CORE)return &core.header;
     if(id==IFS_FS_GROUP_VOLUME)return &volume_ops.header;
+    if(id==IFS_FS_GROUP_DEFRAG)return &defrag_ops.header;
     return NULL;
 }
 __attribute__((used,section(".ifsmeta")))
@@ -462,7 +479,8 @@ static const IfsFsModuleApiV2 api={
     .runtime_profiles=IFS_FS_PROFILE_HOSTED,
 #endif
     .group_mask=IFS_FS_GROUP_BIT(IFS_FS_GROUP_CORE)|
-                IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME),
+                IFS_FS_GROUP_BIT(IFS_FS_GROUP_VOLUME)|
+                IFS_FS_GROUP_BIT(IFS_FS_GROUP_DEFRAG),
     .query_group=query
 };
 __attribute__((visibility("default")))

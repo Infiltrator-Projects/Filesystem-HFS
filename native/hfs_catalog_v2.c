@@ -388,3 +388,60 @@ int hfs_catalogue_read_v2(const HfsCatalogueV2 *v, const char *path,
     if (rc!=IFS_FS_OK) return rc;
     return fork_read(v,file.extents,file.length,offset,output,bytes);
 }
+
+/* Return complete logical data-fork extents, not allocated slack. Validate
+ * the entire fork before publishing any page: overflow records are not
+ * yet supported and must never masquerade as an EOF or a partial map.
+ * The read path and the map share pathname and bitmap validation. */
+int hfs_catalogue_map_v2(const HfsCatalogueV2 *v,const char *path,
+                         uint64_t first,IfsFsExtentV2 *out,uint32_t capacity,
+                         uint32_t *count)
+{
+    if(!count)return IFS_FS_INVALID;
+    *count=0u;
+    if(!v || !out || !capacity)return IFS_FS_INVALID;
+    CataloguedEntry file;
+    int rc=resolve(v,path,&file);
+    if(rc!=IFS_FS_OK)return rc;
+    if(file.type!=IFS_FS_ENTRY_FILE)return IFS_FS_INVALID;
+    rc=check_allocated_extents(v,file.extents,file.length);
+    if(rc!=IFS_FS_OK)return rc;
+    IfsFsExtentV2 complete[3]={{0}};
+    uint32_t total=0u;
+    uint64_t logical=0u;
+    for(unsigned i=0;i<3u;++i) {
+        const HfsExtentV2 *e=&file.extents[i];
+        if(!e->block_count)continue;
+        /* Reject overlapping allocations, including allocated slack. */
+        for(unsigned j=0;j<i;++j) {
+            const HfsExtentV2 *other=&file.extents[j];
+            if(other->block_count &&
+               e->block_start<other->block_start+other->block_count &&
+               other->block_start<e->block_start+e->block_count)
+                return IFS_FS_CORRUPT;
+        }
+        uint64_t physical=v->allocation_start+
+            (uint64_t)e->block_start*v->allocation_bytes;
+        uint64_t allocated=(uint64_t)e->block_count*v->allocation_bytes;
+        if(physical>v->host->volume_bytes ||
+           allocated>v->host->volume_bytes-physical)
+            return IFS_FS_CORRUPT;
+        if(logical==file.length)continue;
+        uint64_t length=file.length-logical;
+        if(length>allocated)length=allocated;
+        if(total && complete[total-1u].physical_offset+
+             complete[total-1u].length==physical)
+            complete[total-1u].length+=length;
+        else
+            complete[total++]=(IfsFsExtentV2){
+                .logical_offset=logical,.physical_offset=physical,.length=length};
+        logical+=length;
+    }
+    if(logical!=file.length)return IFS_FS_CORRUPT;
+    if(first>=total)return IFS_FS_END;
+    uint32_t take=total-(uint32_t)first;
+    if(take>capacity)take=capacity;
+    memcpy(out,complete+(uint32_t)first,take*sizeof(*out));
+    *count=take;
+    return IFS_FS_OK;
+}

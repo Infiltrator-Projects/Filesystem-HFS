@@ -47,6 +47,41 @@ static void release(void *ctx,void *data)
     if(data)++((Device *)ctx)->releases;
     free(data);
 }
+static int verify_map(const IfsFsDefragOpsV2 *map,void *volume,
+                      int image,const char *path,const char *source)
+{
+    int fd=open(source,O_RDONLY|O_CLOEXEC);
+    VERIFY(fd>=0);
+    struct stat st;
+    VERIFY(fstat(fd,&st)==0 && st.st_size>0);
+    uint64_t logical=0u;
+    for(uint64_t first=0u;first<4u;++first) {
+        IfsFsExtentV2 e={0};
+        uint32_t count=99u;
+        int rc=map->map(volume,path,first,&e,1u,&count);
+        if(rc==IFS_FS_END) {
+            VERIFY(count==0u && logical==(uint64_t)st.st_size);
+            VERIFY(close(fd)==0);
+            return 0;
+        }
+        VERIFY(rc==IFS_FS_OK && count==1u && e.logical_offset==logical &&
+               e.length && !e.flags && !e.reserved &&
+               logical<=(uint64_t)st.st_size &&
+               e.length<=(uint64_t)st.st_size-logical);
+        unsigned char raw[4096],expected[4096];
+        for(uint64_t at=0u;at<e.length;) {
+            uint32_t take=e.length-at<sizeof(raw)?
+                (uint32_t)(e.length-at):(uint32_t)sizeof(raw);
+            VERIFY(pread(image,raw,take,(off_t)(e.physical_offset+at))==(ssize_t)take);
+            VERIFY(pread(fd,expected,take,(off_t)(logical+at))==(ssize_t)take);
+            VERIFY(!memcmp(raw,expected,take));
+            at+=take;
+        }
+        logical+=e.length;
+    }
+    VERIFY(0); /* a complete three-inline-extent fork must terminate */
+    return 1;
+}
 static int compare_file(const IfsFsCoreOpsV2 *core,void *volume,
                         const char *hfs_path,const char *source_path)
 {
@@ -186,6 +221,16 @@ int main(int argc,char **argv)
     VERIFY(found_kernel && found_initrd && found_end);
     VERIFY(compare_file(core,volume,"/kernel.img",argv[2])==0);
     VERIFY(compare_file(core,volume,"/initramfs",argv[3])==0);
+    const IfsFsDefragOpsV2 *map=(const void *)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
+    VERIFY(map && map->header.capabilities==IFS_FS_DEFRAG_MAP && map->map);
+    VERIFY(verify_map(map,volume,device.fd,"/kernel.img",argv[2])==0);
+    VERIFY(verify_map(map,volume,device.fd,"/initramfs",argv[3])==0);
+    IfsFsExtentV2 invalid={0};
+    uint32_t extent_count=99u;
+    VERIFY(map->map(volume,"/not-present",0u,&invalid,1u,&extent_count)==IFS_FS_NOT_FOUND &&
+           extent_count==0u);
+    VERIFY(map->map(volume,"/",0u,&invalid,1u,&extent_count)==IFS_FS_INVALID &&
+           extent_count==0u);
     VERIFY(core->stat(volume,"/not-present",&entry)==IFS_FS_NOT_FOUND);
     VERIFY(core->unmount(volume)==IFS_FS_OK);
     VERIFY(close(device.fd)==0);

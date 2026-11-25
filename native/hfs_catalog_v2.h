@@ -27,4 +27,6 @@ void hfs_catalogue_close_v2(HfsCatalogueV2 *);
 int hfs_catalogue_stat_v2(const HfsCatalogueV2 *, const char *, IfsFsEntryV2 *);
 int hfs_catalogue_list_v2(const HfsCatalogueV2 *, const char *, uint32_t, IfsFsEntryV2 *);
 int hfs_catalogue_read_v2(const HfsCatalogueV2 *, const char *, uint64_t, void *, uint32_t);
+int hfs_catalogue_map_v2(const HfsCatalogueV2 *, const char *, uint64_t,
+                         IfsFsExtentV2 *, uint32_t, uint32_t *);
 #endif
