@@ -3,7 +3,7 @@
  * B-tree lookup, directory enumeration and checked read-only data forks.
  * Hosted and freestanding profiles share the same format-owned implementation.
  * Hosted creation and append are bounded to the native formatter's flat-root
- * profile. Firmware, general mutation, journal recovery and relocation remain read-only or unsupported.
+ * profile. Hosted native relocation uses a formatter-owned redo journal.
  */
 #include <infiltratr/filesystem_module_v2.h>
 #include "hfs_catalog_v2.h"
@@ -92,8 +92,19 @@ static int examine(const IfsFsHostRuntimeV2 *host,uint32_t *variant,
     }
     return IFS_FS_OK;
 }
+#ifndef IFS_HFS_FIRMWARE_BUILD
+static int hr_pending_probe(const IfsFsHostRuntimeV2 *,int *);
+#endif
 static int probe(const IfsFsHostRuntimeV2 *host, uint32_t *variant)
 {
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    if(!variant)return IFS_FS_INVALID;
+    *variant=0u;
+    int pending=0;
+    int rc=hr_pending_probe(host,&pending);
+    if(rc!=IFS_FS_OK)return rc;
+    if(pending){*variant=1u;return IFS_FS_OK;}
+#endif
     return examine(host, variant, NULL);
 }
 /* Stable, non-recycled mount handles and independent per-volume B-tree
@@ -101,7 +112,10 @@ static int probe(const IfsFsHostRuntimeV2 *host, uint32_t *variant)
 #define HFS_MAX_MOUNTS 32u
 typedef struct {
     uintptr_t token;
-    unsigned busy, writable, mutation_fault;
+    unsigned busy, writable, mutation_fault, reloc_state;
+    void *reloc_plan;
+    uintptr_t reloc_generation,reloc_token;
+    uint64_t mount_recovered;
     IfsFsHostRuntimeV2 host;
     IfsFsVolumeInfoV2 info;
     HfsCatalogueV2 catalog;
@@ -113,6 +127,13 @@ static unsigned formatting;
 static int writable_profile(HfsMount *slot);
 static int create_file(void *,const char *,uint32_t);
 static int write_file(void *,const char *,uint64_t,const void *,uint32_t);
+static int hr_mount_prepare(const IfsFsHostRuntimeV2 *,unsigned *,uint64_t *);
+static void hr_drop_plan(HfsMount *);
+static int hr_plan(void *,const char *,uint32_t,void **);
+static int hr_execute(void *,void *,uint64_t *);
+static int hr_verify(void *,void *);
+static int hr_recover(void *,uint32_t,uint64_t *);
+static void hr_release(void *,void *);
 #endif
 /* A short registry lock protects token allocation and exclusive per-volume
  * operation leases. The lock is never held across host I/O. A busy volume
@@ -197,7 +218,12 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
     unlock_registry();
     /* Reserve the slot before any media read: a reentrant formatter must
      * not replace the MDB between geometry inspection and catalogue open. */
-    int rc=examine(host,&variant,&measured);
+    int rc;
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    rc=hr_mount_prepare(host,&slot->reloc_state,&slot->mount_recovered);
+    if(rc!=IFS_FS_OK)return release_mount(slot,rc);
+#endif
+    rc=examine(host,&variant,&measured);
     if (rc!=IFS_FS_OK) return release_mount(slot,rc);
     /* The Common V2 host structure is size-versioned. Copy only the
      * caller-supplied prefix; never read unowned extension bytes. */
@@ -234,6 +260,9 @@ static int unmount_volume(void *volume)
     HfsMount *slot;
     int rc=acquire_mount(volume,&slot);
     if (rc!=IFS_FS_OK) return rc;
+    #ifndef IFS_HFS_FIRMWARE_BUILD
+    hr_drop_plan(slot);
+    #endif
     hfs_catalogue_close_v2(&slot->catalog);
     slot->host=(IfsFsHostRuntimeV2){0};
     slot->info=(IfsFsVolumeInfoV2){0};
@@ -290,8 +319,17 @@ static int map_file(void *volume,const char *path,uint64_t first,
 }
 static const IfsFsDefragOpsV2 defrag_ops={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsDefragOpsV2),
-             IFS_FS_GROUP_DEFRAG,0u,IFS_FS_DEFRAG_MAP},
+             IFS_FS_GROUP_DEFRAG,0u,
+#ifdef IFS_HFS_FIRMWARE_BUILD
+             IFS_FS_DEFRAG_MAP},
+#else
+             IFS_FS_DEFRAG_ALL},
+#endif
     .map=map_file
+#ifndef IFS_HFS_FIRMWARE_BUILD
+    ,.plan=hr_plan,.execute=hr_execute,.verify=hr_verify,
+    .recover=hr_recover,.release_plan=hr_release
+#endif
 };
 static const IfsFsCoreOpsV2 core={
     .header={IFS_FS_GROUP_ABI_V2,sizeof(IfsFsCoreOpsV2),
@@ -354,7 +392,7 @@ static uint32_t format_key(uint8_t *p,uint32_t parent,const char *name,uint32_t 
  * layouts rather than attempt unqualified B-tree growth or repair.
  */
 enum { HFS_MUT_FILES=24u, HFS_MUT_RECORDS=HFS_MUT_FILES+2u };
-typedef struct { uint8_t data[144]; uint32_t length; } HfsRecord;
+typedef struct { uint8_t data[144]; uint32_t length,offset; } HfsRecord;
 typedef struct {
     HfsMount *slot;
     uint8_t mdb[512],oldmdb[512];
@@ -469,7 +507,6 @@ static int mutation_load(HfsMutation *m,HfsMount *slot)
     const IfsFsHostRuntimeV2 *h=&slot->host;
     const HfsCatalogueV2 *v=&slot->catalog;
     if(slot->mutation_fault)return IFS_FS_IO_ERROR;
-    if(!slot->writable)return IFS_FS_ACCESS;
     m->unit=v->allocation_bytes;m->blocks=v->allocation_blocks;
     m->bitmap_bytes=v->bitmap_bytes;
     if(v->allocation_start!=HFS_FMT_HEAP || m->unit<4096u ||
@@ -521,7 +558,8 @@ static int mutation_load(HfsMutation *m,HfsMount *slot)
                to>512u-2u*(n+1u) || to-from>sizeof(m->records[0].data) ||
                to-from<8u)return IFS_FS_UNSUPPORTED;
             HfsRecord *r=&m->records[m->count];
-            r->length=to-from;memcpy(r->data,node+from,r->length);
+            r->length=to-from;r->offset=next*512u+from;
+            memcpy(r->data,node+from,r->length);
             uint32_t key=record_key_bytes(r),parent=be32(r->data+2u),nl=r->data[6];
             if(nl>31u || r->data[0]!=6u+nl || key>=r->length)
                 return IFS_FS_CORRUPT;
@@ -654,6 +692,8 @@ static int create_file(void *volume,const char *path,uint32_t type)
     if(rc!=IFS_FS_OK)return rc;
     HfsMutation m={0};const char *name=NULL;uint32_t n=0u;
     if(!slot->writable)return release_mount(slot,IFS_FS_ACCESS);
+    if(slot->reloc_plan)return release_mount(slot,IFS_FS_BUSY);
+    if(slot->reloc_state==2u)return release_mount(slot,IFS_FS_IO_ERROR);
     if(type!=IFS_FS_ENTRY_FILE)return release_mount(slot,IFS_FS_UNSUPPORTED);
     rc=root_name(path,&name,&n);if(rc!=IFS_FS_OK)return release_mount(slot,rc);
     rc=mutation_load(&m,slot);if(rc!=IFS_FS_OK)goto done;
@@ -721,6 +761,8 @@ static int write_file(void *volume,const char *path,uint64_t offset,
     HfsMount *slot;int rc=acquire_mount(volume,&slot);
     if(rc!=IFS_FS_OK)return rc;
     if(!slot->writable)return release_mount(slot,IFS_FS_ACCESS);
+    if(slot->reloc_plan)return release_mount(slot,IFS_FS_BUSY);
+    if(slot->reloc_state==2u)return release_mount(slot,IFS_FS_IO_ERROR);
     if(!data || !length || length>65536u || offset>UINT32_MAX-length)
         return release_mount(slot,IFS_FS_UNSUPPORTED);
     HfsMutation m={0};const char *name=NULL;uint32_t n=0u;
@@ -772,6 +814,8 @@ static int write_file(void *volume,const char *path,uint64_t offset,
 done:
     mutation_free(&m);return release_mount(slot,rc);
 }
+
+#include "hfs_relocation.h"
 
 static int format_impl(const IfsFsHostRuntimeV2 *h,const char *label)
 {
@@ -838,6 +882,11 @@ static int format_impl(const IfsFsHostRuntimeV2 *h,const char *label)
     store32(mdb+70,1u);store32(mdb+74,unit);store32(mdb+78,unit);
     store32(mdb+130,unit);store16(mdb+136,1u);
     store32(mdb+146,unit);store16(mdb+150,1u);store16(mdb+152,1u);
+    if(h->logical_sector_bytes<=1024u) {
+        HrGeometry geometry={unit,blocks,now,h->volume_bytes};
+        rc=hr_journal_write(h,&geometry,NULL);
+        if(rc!=IFS_FS_OK)goto done;
+    }
     rc=format_write(h,h->volume_bytes-1024u,mdb,sizeof(mdb));
     if(rc!=IFS_FS_OK)goto done;
     if(h->flush(h->context)!=0){rc=IFS_FS_IO_ERROR;goto done;}

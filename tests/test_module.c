@@ -118,7 +118,9 @@ int main(void) {
     CHECK(ops && ops->header.capabilities==(IFS_FS_VOLUME_QUERY|IFS_FS_VOLUME_FORMAT|IFS_FS_VOLUME_LABEL_GET) &&
           ops->query && ops->format && ops->label && !ops->set_label && !ops->repair);
     const IfsFsDefragOpsV2 *map=(const void *)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
-    CHECK(map && map->header.capabilities==IFS_FS_DEFRAG_MAP && map->map);
+    CHECK(map && map->map &&
+          (map->header.capabilities==IFS_FS_DEFRAG_MAP ||
+           map->header.capabilities==IFS_FS_DEFRAG_ALL));
     IfsFsHostRuntimeV2 host={0};
     host.abi_version=IFS_FS_HOST_ABI_V2;
     host.structure_bytes=sizeof(host);

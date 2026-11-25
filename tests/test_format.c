@@ -130,7 +130,8 @@ int main(int argc,char **argv)
     CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && mount);
     CHECK(core->create(mount,"/REJECT.BIN",IFS_FS_ENTRY_FILE)==IFS_FS_ACCESS);
     const IfsFsDefragOpsV2 *map=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
-    CHECK(map && map->map);
+    CHECK(map && map->map && map->header.capabilities==IFS_FS_DEFRAG_ALL &&
+          map->plan && map->execute && map->verify && map->recover && map->release_plan);
     for(unsigned file=0;file<16u;++file) {
         char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
         CHECK(core->stat(mount,path,&entry)==IFS_FS_OK && entry.size_bytes==2u*sizeof(payload));
@@ -145,6 +146,31 @@ int main(int argc,char **argv)
         CHECK(map->map(mount,path,2u,extents,3u,&count)==IFS_FS_END && count==0u);
     }
     CHECK(core->unmount(mount)==IFS_FS_OK);
+    if(m.sector<=1024u) {
+        const uint64_t expected_free=info.free_bytes;
+        for(uint32_t policy=0u;policy<=10u;policy+=10u) {
+            CHECK(core->mount(&h,&mount,&info)==IFS_FS_OK);
+            void *plan=NULL;uint64_t moved=0u,repaired=UINT64_MAX;
+            CHECK(map->plan(mount,"/",policy,&plan)==IFS_FS_OK && plan);
+            CHECK(map->execute(mount,plan,&moved)==IFS_FS_OK && moved);
+            CHECK(map->verify(mount,plan)==IFS_FS_OK);
+            map->release_plan(mount,plan);
+            CHECK(map->recover(mount,0u,&repaired)==IFS_FS_OK && repaired==0u);
+            CHECK(core->unmount(mount)==IFS_FS_OK);
+            CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && info.free_bytes==expected_free);
+            for(unsigned file=0;file<16u;++file) {
+                char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
+                CHECK(core->read(mount,path,0u,readback,sizeof(readback))==IFS_FS_OK &&
+                      !memcmp(payload,readback,sizeof(payload)));
+                CHECK(core->read(mount,path,sizeof(payload),readback,sizeof(readback))==IFS_FS_OK &&
+                      !memcmp(payload,readback,sizeof(payload)));
+                IfsFsExtentV2 ext[3]={{0}};uint32_t count=0;
+                CHECK(map->map(mount,path,0u,ext,3u,&count)==IFS_FS_OK && count==1u &&
+                      ext[0].length==2u*sizeof(payload));
+            }
+            CHECK(core->unmount(mount)==IFS_FS_OK);
+        }
+    }
     unsigned char primary[512],alternate[512];
     CHECK(pread(m.fd,primary,sizeof(primary),1024)==(ssize_t)sizeof(primary));
     CHECK(pread(m.fd,alternate,sizeof(alternate),(off_t)(m.bytes-1024u))==(ssize_t)sizeof(alternate));
