@@ -95,7 +95,39 @@ int main(int argc,char **argv)
     CHECK(core->directory_entry(mount,"/",0u,&entry)==IFS_FS_END);
     CHECK(vol->format(&h,variant,"NativeHFS",0u)==IFS_FS_BUSY);
     CHECK(core->unmount(mount)==IFS_FS_OK);
-    CHECK(core->mount(&h,&mount,&info)==IFS_FS_ACCESS && !mount);
+    CHECK(core->mount(&h,&mount,&info)==IFS_FS_OK && mount);
+    CHECK(core->create && core->write);
+    unsigned char payload[8192],readback[8192];
+    for(unsigned i=0;i<sizeof(payload);++i)payload[i]=(unsigned char)(i*31u+7u);
+    for(unsigned file=0;file<16u;++file) {
+        char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
+        CHECK(core->create(mount,path,IFS_FS_ENTRY_FILE)==IFS_FS_OK);
+    }
+    CHECK(core->create(mount,"/F000000.BIN",IFS_FS_ENTRY_FILE)==IFS_FS_EXISTS);
+    for(unsigned phase=0;phase<2u;++phase)
+        for(unsigned file=0;file<16u;++file) {
+            char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
+            CHECK(core->write(mount,path,phase*sizeof(payload),payload,sizeof(payload))==IFS_FS_OK);
+        }
+    CHECK(core->unmount(mount)==IFS_FS_OK);
+    CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && mount);
+    CHECK(core->create(mount,"/REJECT.BIN",IFS_FS_ENTRY_FILE)==IFS_FS_ACCESS);
+    const IfsFsDefragOpsV2 *map=(const void*)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
+    CHECK(map && map->map);
+    for(unsigned file=0;file<16u;++file) {
+        char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
+        CHECK(core->stat(mount,path,&entry)==IFS_FS_OK && entry.size_bytes==2u*sizeof(payload));
+        CHECK(core->read(mount,path,0u,readback,sizeof(readback))==IFS_FS_OK &&
+              !memcmp(payload,readback,sizeof(payload)));
+        CHECK(core->read(mount,path,sizeof(payload),readback,sizeof(readback))==IFS_FS_OK &&
+              !memcmp(payload,readback,sizeof(payload)));
+        IfsFsExtentV2 extents[3]={{0}};uint32_t count=0u;
+        CHECK(map->map(mount,path,0u,extents,3u,&count)==IFS_FS_OK && count==2u);
+        CHECK(extents[0].length==sizeof(payload) && extents[1].length==sizeof(payload) &&
+              extents[1].physical_offset>extents[0].physical_offset+extents[0].length);
+        CHECK(map->map(mount,path,2u,extents,3u,&count)==IFS_FS_END && count==0u);
+    }
+    CHECK(core->unmount(mount)==IFS_FS_OK);
     unsigned char primary[512],alternate[512];
     CHECK(pread(m.fd,primary,sizeof(primary),1024)==(ssize_t)sizeof(primary));
     CHECK(pread(m.fd,alternate,sizeof(alternate),(off_t)(m.bytes-1024u))==(ssize_t)sizeof(alternate));
