@@ -9,7 +9,17 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <sys/random.h>
+/* The fault harness records original and unflushed sectors separately.
+ * Restoring only the latter simulates a loss of volatile writes, rather
+ * than simply reporting an I/O error while leaving all bytes durable. */
+enum { HFS_UNDO_MAX=256u };
+typedef struct {uint64_t at;uint8_t data[1024];} UndoSector;
+typedef struct {
+    uint32_t events,fail_at,original_count,pending_count;
+    UndoSector original[HFS_UNDO_MAX],pending[HFS_UNDO_MAX];
+} FaultTrace;
 typedef struct {int fd;uint32_t sector;uint64_t bytes;unsigned writes;
+    FaultTrace *trace;
     const IfsFsVolumeOpsV2 *ops;
     const IfsFsHostRuntimeV2 *writer;
     int attempted,format_result;
@@ -24,19 +34,102 @@ static int rd(void *ctx,uint64_t at,void *p,uint32_t n)
     if(at%m->sector || n%m->sector || n>m->sector || at>m->bytes || n>m->bytes-at)return -1;
     return pread(m->fd,p,n,(off_t)at)==(ssize_t)n?0:-1;
 }
+static int note_sector(Media *m,UndoSector *undo,uint32_t *count,uint64_t at)
+{
+    for(uint32_t i=0;i<*count;++i)if(undo[i].at==at)return 0;
+    if(*count>=HFS_UNDO_MAX || m->sector>sizeof(undo[0].data))return -1;
+    UndoSector *u=&undo[*count];
+    u->at=at;
+    if(pread(m->fd,u->data,m->sector,(off_t)at)!=(ssize_t)m->sector)return -1;
+    ++*count;return 0;
+}
+static int restore_sectors(Media *m,UndoSector *undo,uint32_t *count)
+{
+    for(uint32_t i=0;i<*count;++i)
+        if(pwrite(m->fd,undo[i].data,m->sector,(off_t)undo[i].at)!=(ssize_t)m->sector)
+            return -1;
+    *count=0u;return fsync(m->fd);
+}
 static int wr(void *ctx,uint64_t at,const void *p,uint32_t n)
 {
     Media *m=ctx;
     if(at%m->sector || n%m->sector || n>m->sector || at>m->bytes || n>m->bytes-at)return -1;
+    if(m->trace) {
+        FaultTrace *f=m->trace;
+        if(++f->events==f->fail_at)return -1;
+        if(n!=m->sector || note_sector(m,f->original,&f->original_count,at) ||
+           note_sector(m,f->pending,&f->pending_count,at))return -1;
+    }
     ++m->writes;
     return pwrite(m->fd,p,n,(off_t)at)==(ssize_t)n?0:-1;
 }
-static int flush(void *ctx){return fsync(((Media*)ctx)->fd);}
+static int flush(void *ctx)
+{
+    Media *m=ctx;
+    if(m->trace && ++m->trace->events==m->trace->fail_at)return -1;
+    int rc=fsync(m->fd);
+    if(!rc && m->trace)m->trace->pending_count=0u;
+    return rc;
+}
 static void *allocate(void *ctx,size_t n){(void)ctx;return malloc(n);}
 static void release(void *ctx,void *p){(void)ctx;free(p);}
 static int entropy(void *ctx,void *p,uint32_t n)
 {(void)ctx;return getrandom(p,n,0)==(ssize_t)n?0:-1;}
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"HFS format line %d: %s\n",__LINE__,#x);goto done;}}while(0)
+static int check_relocation_faults(Media *m,const IfsFsHostRuntimeV2 *host,
+    const IfsFsCoreOpsV2 *core,const IfsFsDefragOpsV2 *map,
+    uint64_t free_bytes,const unsigned char payload[8192])
+{
+    FaultTrace *f=calloc(1,sizeof *f);
+    if(!f)return -1;
+    int result=-1;
+    void *mount=NULL,*plan=NULL;
+    m->trace=f;
+    for(uint32_t policy=0u;policy<=10u;policy+=10u) {
+        uint32_t events=0u;
+        for(uint32_t trial=0u;trial<=events;++trial) {
+            f->events=0u;f->fail_at=trial?trial:UINT32_MAX;
+            IfsFsVolumeInfoV2 info={.structure_bytes=sizeof info};
+            uint64_t moved=0u,repaired=0u;
+            CHECK(core->mount(host,&mount,&info)==IFS_FS_OK);
+            CHECK(map->plan(mount,"/F000000.BIN",policy,&plan)==IFS_FS_OK && plan);
+            int rc=map->execute(mount,plan,&moved);
+            if(!trial) {
+                CHECK(rc==IFS_FS_OK && moved==16384u);
+                CHECK(map->verify(mount,plan)==IFS_FS_OK);
+                events=f->events;
+                CHECK(events && events<512u);
+            }else CHECK(rc!=IFS_FS_OK);
+            map->release_plan(mount,plan);plan=NULL;
+            CHECK(core->unmount(mount)==IFS_FS_OK);mount=NULL;
+            CHECK(!restore_sectors(m,f->pending,&f->pending_count));
+            f->fail_at=UINT32_MAX;
+            if(trial) {
+                CHECK(core->mount(host,&mount,&info)==IFS_FS_OK &&
+                      info.free_bytes==free_bytes);
+                CHECK(map->recover(mount,0u,&repaired)==IFS_FS_OK);
+                CHECK(map->recover(mount,0u,&repaired)==IFS_FS_OK && !repaired);
+                for(unsigned file=0;file<16u;++file) {
+                    char path[24];unsigned char readback[8192];
+                    snprintf(path,sizeof path,"/F%06u.BIN",file);
+                    for(unsigned phase=0;phase<2u;++phase)
+                        CHECK(core->read(mount,path,phase*sizeof readback,
+                              readback,sizeof readback)==IFS_FS_OK &&
+                              !memcmp(readback,payload,sizeof readback));
+                }
+                CHECK(core->unmount(mount)==IFS_FS_OK);mount=NULL;
+            }
+            CHECK(!restore_sectors(m,f->original,&f->original_count));
+            f->pending_count=0u;
+        }
+    }
+    puts("Classic HFS relocation write/flush interruption recovery PASS");
+    result=0;
+done:
+    if(plan && mount)map->release_plan(mount,plan);
+    if(mount)core->unmount(mount);
+    m->trace=NULL;free(f);return result;
+}
 int main(int argc,char **argv)
 {
     if(argc!=5)return 2;
@@ -148,6 +241,7 @@ int main(int argc,char **argv)
     CHECK(core->unmount(mount)==IFS_FS_OK);
     if(m.sector<=1024u) {
         const uint64_t expected_free=info.free_bytes;
+        CHECK(check_relocation_faults(&m,&h,core,map,expected_free,payload)==0);
         for(uint32_t policy=0u;policy<=10u;policy+=10u) {
             CHECK(core->mount(&h,&mount,&info)==IFS_FS_OK);
             void *plan=NULL;uint64_t moved=0u,repaired=UINT64_MAX;
