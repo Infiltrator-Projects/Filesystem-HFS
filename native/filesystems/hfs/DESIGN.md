@@ -1,5 +1,13 @@
 # Classic HFS Design and Ownership
 
+## Current production architecture
+
+The independent `HFS.so` is the canonical installed filesystem provider. The hosted module declares probe, mount, unmount, stat, directory enumeration, read and format. Mount reservation precedes initial media inspection. Hosted and freestanding reader qualifications are separate. The canonical entry point is `infiltrator_filesystem_api_v2`. Consumers must negotiate the actual profile and operation masks and use bounded, partition-relative host I/O. A source-level callback does not by itself establish that every format variant or host profile is qualified.
+
+The hosted and freestanding profiles are qualified separately. Only the shared object and its technical PDF are installed by the filesystem package; the native RUN downloads its exact source revision. No separate per-format kernel or EFI driver or FUSE substitute is a production delivery path. See the [current README](../../../README.md) and [migration evidence](../../../MIGRATION_STATUS.md) for exact scope and qualification. The inherited design and source-ownership record below is historical where it describes older source layouts, implementation status or adapters; it remains valuable for format semantics and attribution.
+
+## Historical design and source record
+
 > **Working source (23 October 2026).** This filesystem's `linux/` directory contains the actual copied Linux implementation source, preserved with its original attribution and available for direct modification. It is not a replaceable research-only reference tree. The old independently-rewrite-first policy and any old directory-layout/refresh language below are historical, not a restriction on editing this working baseline. Only explicitly qualified drivers appear in `data/native-filesystems.tsv`.
 
 
@@ -9,9 +17,9 @@ HFS is the classic Macintosh Hierarchical File System. It is a conventional
 local block filesystem and therefore belongs in the canonical-engine
 architecture.
 
-## Current state
+## Historical state
 
-HFS is currently **imported-source development state**. The pinned upstream Linux HFS
+HFS was originally documented as **imported-source development state**. The pinned upstream Linux HFS
 source under `linux/` is preserved as compatibility evidence and is
 not project-authored Filesystems code.
 
