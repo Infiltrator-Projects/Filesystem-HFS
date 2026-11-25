@@ -222,7 +222,19 @@ int main(int argc,char **argv)
     VERIFY(compare_file(core,volume,"/kernel.img",argv[2])==0);
     VERIFY(compare_file(core,volume,"/initramfs",argv[3])==0);
     const IfsFsDefragOpsV2 *map=(const void *)ifs_fs_group_v2(api,IFS_FS_GROUP_DEFRAG);
-    VERIFY(map && map->header.capabilities==IFS_FS_DEFRAG_MAP && map->map);
+    VERIFY(map && map->map);
+    if(api->runtime_profiles&IFS_FS_PROFILE_HOSTED) {
+        VERIFY(map->header.capabilities==IFS_FS_DEFRAG_ALL &&
+               map->plan && map->execute && map->verify &&
+               map->recover && map->release_plan);
+        void *foreign_plan=(void *)(uintptr_t)1u;
+        VERIFY(map->plan(volume,"/",0u,&foreign_plan)==IFS_FS_UNSUPPORTED &&
+               !foreign_plan);
+    } else {
+        VERIFY(map->header.capabilities==IFS_FS_DEFRAG_MAP &&
+               !map->plan && !map->execute && !map->verify &&
+               !map->recover && !map->release_plan);
+    }
     VERIFY(verify_map(map,volume,device.fd,"/kernel.img",argv[2])==0);
     VERIFY(verify_map(map,volume,device.fd,"/initramfs",argv[3])==0);
     IfsFsExtentV2 invalid={0};

@@ -124,7 +124,7 @@ jobs:
             gh release create "$tag" dist/*.deb dist/*.run \
               --target "$GITHUB_SHA" \
               --title "Classic HFS Common V2 freestanding reader $version" \
-              --notes "Exact packaged Common V2 HFS.so, no V1 or .ko. Independently formatted HFS real-media stat/list/read, bounded inline extents, validated metadata and source nonmutation; Self-contained Common V2 freestanding ELF checks; corrupt media is rejected by the native V2 reader. Unsupported catalogue features fail closed."
+              --notes "Exact packaged Common V2 HFS.so, no V1 or .ko. Independently formatted HFS real-media stat/list/read; hosted native flat-root inline-extent relocation, growth slack verification and durable write/flush interruption recovery; freestanding reader remains read-only. Foreign or unsupported catalogue and journal layouts fail closed."
           fi
           mkdir -p "$RUNNER_TEMP/release-check"
           gh release download "$tag" -p '*.deb' -p '*.run' \
