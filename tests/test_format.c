@@ -101,13 +101,18 @@ int main(int argc,char **argv)
     for(unsigned i=0;i<sizeof(payload);++i)payload[i]=(unsigned char)(i*31u+7u);
     for(unsigned file=0;file<16u;++file) {
         char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
-        CHECK(core->create(mount,path,IFS_FS_ENTRY_FILE)==IFS_FS_OK);
+        const int created=core->create(mount,path,IFS_FS_ENTRY_FILE);
+        if(created!=IFS_FS_OK)fprintf(stderr,"HFS CORE.CREATE %s returned %d\n",path,created);
+        CHECK(created==IFS_FS_OK);
+        CHECK(core->stat(mount,path,&entry)==IFS_FS_OK && entry.size_bytes==0u);
     }
     CHECK(core->create(mount,"/F000000.BIN",IFS_FS_ENTRY_FILE)==IFS_FS_EXISTS);
     for(unsigned phase=0;phase<2u;++phase)
         for(unsigned file=0;file<16u;++file) {
             char path[24];snprintf(path,sizeof(path),"/F%06u.BIN",file);
-            CHECK(core->write(mount,path,phase*sizeof(payload),payload,sizeof(payload))==IFS_FS_OK);
+            const int written=core->write(mount,path,phase*sizeof(payload),payload,sizeof(payload));
+            if(written!=IFS_FS_OK)fprintf(stderr,"HFS CORE.WRITE %s phase %u returned %d\n",path,phase,written);
+            CHECK(written==IFS_FS_OK);
         }
     CHECK(core->unmount(mount)==IFS_FS_OK);
     CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && mount);
