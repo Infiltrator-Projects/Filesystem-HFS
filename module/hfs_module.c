@@ -158,8 +158,6 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
         !ifs_fs_host_v2_valid(host)) return IFS_FS_INVALID;
     *volume=NULL;
     if (!(host->capabilities&IFS_FS_HOST_READ_ONLY)) return IFS_FS_ACCESS;
-    int rc=examine(host,&variant,&measured);
-    if (rc!=IFS_FS_OK) return rc;
     lock_registry();
 #ifndef IFS_HFS_FIRMWARE_BUILD
     if(formatting){unlock_registry();return IFS_FS_BUSY;}
@@ -178,6 +176,10 @@ static int mount_volume(const IfsFsHostRuntimeV2 *host, void **volume,
     slot->busy=1u;
     const uintptr_t token=++next_token;
     unlock_registry();
+    /* Reserve the slot before any media read: a reentrant formatter must
+     * not replace the MDB between geometry inspection and catalogue open. */
+    int rc=examine(host,&variant,&measured);
+    if (rc!=IFS_FS_OK) return release_mount(slot,rc);
     /* The Common V2 host structure is size-versioned. Copy only the
      * caller-supplied prefix; never read unowned extension bytes. */
     memset(&slot->host,0,sizeof(slot->host));

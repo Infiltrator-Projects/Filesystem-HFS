@@ -9,10 +9,18 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <sys/random.h>
-typedef struct {int fd;uint32_t sector;uint64_t bytes;unsigned writes;} Media;
+typedef struct {int fd;uint32_t sector;uint64_t bytes;unsigned writes;
+    const IfsFsVolumeOpsV2 *ops;
+    const IfsFsHostRuntimeV2 *writer;
+    int attempted,format_result;
+} Media;
 static int rd(void *ctx,uint64_t at,void *p,uint32_t n)
 {
     Media *m=ctx;
+    if(m->writer && !m->attempted) {
+        m->attempted=1;
+        m->format_result=m->ops->format(m->writer,1u,"Reentrant",0u);
+    }
     if(at%m->sector || n%m->sector || n>m->sector || at>m->bytes || n>m->bytes-at)return -1;
     return pread(m->fd,p,n,(off_t)at)==(ssize_t)n?0:-1;
 }
@@ -69,7 +77,11 @@ int main(int argc,char **argv)
     char name[128];
     IfsFsEntryV2 entry={.structure_bytes=sizeof(entry),.name=name,.name_capacity=sizeof(name)};
     CHECK(core->probe(&ro,&detected)==IFS_FS_OK && detected==variant);
+    const unsigned before_mount=m.writes;
+    m.ops=vol;m.writer=&h;
     CHECK(core->mount(&ro,&mount,&info)==IFS_FS_OK && mount);
+    m.writer=NULL;
+    CHECK(m.attempted && m.format_result==IFS_FS_BUSY && m.writes==before_mount);
     CHECK(info.variant==variant && info.total_bytes==m.bytes-20480u &&
           info.free_bytes==info.total_bytes-2u*4096u);
     char label[28],tiny[2]={'X','X'};
