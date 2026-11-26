@@ -29,8 +29,10 @@ The target installation is `/System/Filesystems/HFS.so` and `/System/Resources/D
 - [Provider implementation](module/hfs_module.c)
 - [Native design or source provenance](native/filesystems/hfs/DESIGN.md)
 - [Migration and source history](MIGRATION_STATUS.md)
-- [Original-format reference source](docs/HFS.pages) and [PDF](docs/HFS.pdf)
+- [Original-format reference source](docs/HFS.pdfstreams) and [PDF](docs/HFS.pdf)
 - [Project philosophy](docs/PHILOSOPHY.md)
 - [Common ABI](https://github.com/Infiltrator-Projects/Libraries)
 
 The original-format reference and historical migration notes describe different evidence from the current production provider. When descriptions disagree, the current exported descriptor, implementation, executable tests and exact-revision release evidence take precedence.
+
+The [engineering reference](docs/HFS-TECHNICAL-REFERENCE.md) adds field-level original-format guidance. Earlier material is preserved in the PDF.

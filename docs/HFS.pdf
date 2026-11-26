@@ -3,7 +3,7 @@
 << /Type /Catalog /Pages 2 0 R >>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R] /Count 12 >>
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R 30 0 R 32 0 R 34 0 R 36 0 R 38 0 R 40 0 R 42 0 R 44 0 R 46 0 R] /Count 21 >>
 endobj
 3 0 obj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
@@ -18,6 +18,238 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 7 0 R >>
 endobj
 7 0 obj
+<< /Length 1205 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Historical scope and volume selection) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(Apple introduced Hierarchical File System in 1985 to replace the flat) Tj
+T* (Macintosh File System. Classic HFS uses big-endian fields, 16-bit) Tj
+T* (allocation-block identifiers, a separate volume bitmap, catalog and) Tj
+T* (extents-overflow B-trees, and two forks per file. This is not HFS Plus. On) Tj
+T* (partitioned media identify the actual Apple partition boundaries before) Tj
+T* (interpreting volume-relative addresses. The Master Directory Block \(MDB\) is) Tj
+T* (at byte 1024, signature 0x4244. An alternate MDB normally occupies the) Tj
+T* (penultimate 512-byte logical sector. MFS magic 0xD2D7 and HFS Plus) Tj
+T* (signatures represent other formats. Compare plausible geometry and metadata) Tj
+T* (trees before accepting either MDB.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 1 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1227 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Master Directory Block: field layout) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(MDB offsets in bytes: signature 0, creation time 2, modification time 6,) Tj
+T* (attributes 10, root file count 12, bitmap start 14, allocation search hint) Tj
+T* (16, allocation block count 18, allocation block bytes 20, clump size 24,) Tj
+T* (first allocation sector 28, next CNID 30, free blocks 34, Pascal volume name) Tj
+T* (36 \(28 bytes\), backup date 64, backup sequence 68, write count 70,) Tj
+T* (extents/catalog clump sizes 74/78, root directory count 82, file/folder) Tj
+T* (counts 84/88, Finder info 92 \(32 bytes\). Embedded volume signature 124 and) Tj
+T* (extent 126; extents tree size 130 and first three extents 134; catalog tree) Tj
+T* (size 146 and first three extents 150. Check all declared spans, names,) Tj
+T* (counters and version-specific fields.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 2 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1191 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Allocation and two address units) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(The volume bitmap uses 512-byte sector addresses; allocation blocks begin at) Tj
+T* (drAlBlSt*512, each drAlBlkSiz bytes. A set bitmap bit means allocated; bit) Tj
+T* (numbering is MSB first. Allocation block n maps to) Tj
+T* (drAlBlSt*512+n*drAlBlkSiz. For first allocation sector 32, allocation block) Tj
+T* (bytes 4096 and allocation block 100, byte position is 425984. The bitmap for) Tj
+T* (block 100 uses byte 12, mask 0x08. Exclude nonallocation sectors and bitmap) Tj
+T* (padding. A 16-bit allocation count limits the number of allocation blocks) Tj
+T* (regardless of device capacity; larger volumes therefore require larger) Tj
+T* (allocation units. Do not confuse physical sectors, allocation blocks and) Tj
+T* (B-tree node sizes.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 3 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 1293 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Forks and overflow mapping) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(An extent descriptor has 16-bit allocation-block start and count; a record) Tj
+T* (holds three descriptors \(12 bytes\). A catalog file carries initial data-fork) Tj
+T* (and resource-fork extents separately. Sum counts to locate a file logical) Tj
+T* (allocation block; subsequent records are in the extents tree keyed by fork) Tj
+T* (type \(0 data, 0xff resource\), 32-bit CNID and 16-bit first logical) Tj
+T* (allocation-block index. The key has byte length at 0, fork type 1, CNID 2,) Tj
+T* (first block 6. For extents \(100,3\),\(300,2\), logical block 4 maps to) Tj
+T* (allocation block 301. Bound by logical EOF, not physical EOF. Verify) Tj
+T* (continuation key and coverage, detect loops and reject overlap except native) Tj
+T* (reservations. The extents tree's bootstrap cannot depend recursively on an) Tj
+T* (unavailable overflow record.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 4 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 1285 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (B-tree node geometry) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(Both trees are files, not fixed disk arrays. Classic HFS nodes are normally) Tj
+T* (512 bytes. Node descriptor contains forward and backward node numbers at) Tj
+T* (0/4, signed type at 8, height 9, record count 10 and reserved 12; records) Tj
+T* (start after the 14-byte descriptor. The offset table grows backward from) Tj
+T* (node end, with record 0 offset in the last two bytes and an extra free-space) Tj
+T* (offset after the last record index. Header node 0 carries tree depth, root) Tj
+T* (node, leaf count, first and last leaf, node size, maximum key length, total) Tj
+T* (and free node counts. Validate bounds, node allocation map and ascending) Tj
+T* (record offsets. Index records contain a key and child node number; leaf) Tj
+T* (records contain key and value. Traverse by native collation and validate) Tj
+T* (depth, links and cycles.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 5 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 17 0 R >>
+endobj
+17 0 obj
+<< /Length 1263 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Catalog keys and file record inventory) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(Catalog key: one-byte key length, reserved byte, parent CNID at 2, Pascal) Tj
+T* (name at 6. Names are at most 31 bytes and compared with original Macintosh) Tj
+T* (collation; do not apply arbitrary UTF-8 casefold. Values have type byte 1) Tj
+T* (directory, 2 file, 3 directory thread, 4 file thread. File value: flags at) Tj
+T* (2, Finder user info 4..19, CNID 20, obsolete start 24, data logical/physical) Tj
+T* (EOF 26/30, resource start 34, resource logical/physical EOF 36/40, times) Tj
+T* (44/48/52, Finder info 56, clump 72, data extents 74, resource extents 86,) Tj
+T* (reserved 98. Folder record contains valence at 4 and CNID at 6. Thread) Tj
+T* (record contains parent at 10 and name at 14. Check CNID identity and thread) Tj
+T* (relationships rather than treating a catalog key as file storage.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 6 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 19 0 R >>
+endobj
+19 0 obj
+<< /Length 1201 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Namespace mutation and preservation) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(Root CNID is 2, parent-of-root 1, extents tree 3, catalog tree 4 and) Tj
+T* (bad-block file 5. New objects need unique catalog identifiers, a catalog) Tj
+T* (record, applicable thread and parent valence update; fork extension) Tj
+T* (allocates bitmap bits and updates its extent record or overflow tree. B-tree) Tj
+T* (splits may require new nodes and changes to header and map records. Preserve) Tj
+T* (resource forks, Finder type/creator information, dates and original) Tj
+T* (character encoding. Native timestamps are based on the 1904 Macintosh epoch;) Tj
+T* (classic HFS local-time conventions differ from HFS Plus UTC semantics. A) Tj
+T* (file-copy implementation that discards the resource fork is not a complete) Tj
+T* (compatible copier.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 7 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 21 0 R >>
+endobj
+21 0 obj
+<< /Length 1416 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Consistency, relocation and sources) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(Classic HFS has no general metadata journal. Validate catalog and extent) Tj
+T* (tree allocation, all forks and bad-block reservations against the bitmap;) Tj
+T* (reconcile CNIDs, thread references and counts. To relocate a fork, reserve a) Tj
+T* (destination, copy and verify bytes, update extent metadata, then retire old) Tj
+T* (allocation after publication is durable. A crash can require a full repair;) Tj
+T* (no atomic guarantee is implied. Test independently formatted classic) Tj
+T* (Macintosh media with both forks, catalog splits, long native names, overflow) Tj
+T* (extents and corrupt offset tables. Primary reference: Inside Macintosh:) Tj
+T* (Files, Apple Computer. Pinned cross-check:) Tj
+T* (https://github.com/torvalds/linux/tree/v6.12/fs/hfs \(hfs.h, btree.h,) Tj
+T* (extent.c, catalog.c, bitmap.c\). Exact legacy collation, wrapper variants and) Tj
+T* (repair ordering need independent fixtures. Earlier manual follows for) Tj
+T* (provenance.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 8 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 23 0 R >>
+endobj
+23 0 obj
+<< /Length 636 >>
+stream
+0.05 0.13 0.22 rg 0 749 595 93 re f
+0.01 0.52 0.56 rg 50 747 116 5 re f
+1 1 1 rg BT /F2 11 Tf 50 807 Td (INFILTRATOR / FILESYSTEM ENGINEERING REFERENCE) Tj ET
+BT /F2 21 Tf 50 775 Td (HFS - technical reference) Tj ET
+0.05 0.13 0.22 rg BT /F2 14 Tf 50 715 Td (Historical reference appendix) Tj ET
+BT /F1 11 Tf 15 TL 50 685 Td
+(The earlier manual follows for provenance. Its provider and qualification) Tj
+T* (statements are historical; the new engineering chapters take precedence for) Tj
+T* (format interpretation.) Tj
+ET
+0.05 0.13 0.22 rg BT /F1 9 Tf 50 42 Td (Engineering chapter 9 | Original format, not provider qualification) Tj ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 25 0 R >>
+endobj
+25 0 obj
 << /Length 2726 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -55,10 +287,10 @@ BT /F1 10.4 Tf 0.07 0.16 0.23 rg 1 0 0 1 51 213.0 Tm (5. Design rationale and li
 BT /F1 10.4 Tf 0.07 0.16 0.23 rg 1 0 0 1 51 190.0 Tm (6. InfiltratorOS integration boundary) Tj ET
 endstream
 endobj
-8 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+26 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 27 0 R >>
 endobj
-9 0 obj
+27 0 obj
 << /Length 1960 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -81,10 +313,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 527.0 Tm (original format does not i
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 510.0 Tm (Plus.) Tj ET
 endstream
 endobj
-10 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 11 0 R >>
+28 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 29 0 R >>
 endobj
-11 0 obj
+29 0 obj
 << /Length 1741 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -105,10 +337,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 561.0 Tm (directory identifiers and 
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 544.0 Tm (identity through renames in ways that path-only formats do not.) Tj ET
 endstream
 endobj
-12 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 13 0 R >>
+30 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 31 0 R >>
 endobj
-13 0 obj
+31 0 obj
 << /Length 1723 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -129,10 +361,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 561.0 Tm (later introduced by HFS Pl
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 544.0 Tm (and must not be replaced with modern Unicode folding without explicit format logic.) Tj ET
 endstream
 endobj
-14 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 15 0 R >>
+32 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 33 0 R >>
 endobj
-15 0 obj
+33 0 obj
 << /Length 1730 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -153,10 +385,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 561.0 Tm (data extents remain on the
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 544.0 Tm (identities can destroy surviving Macintosh metadata.) Tj ET
 endstream
 endobj
-16 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 17 0 R >>
+34 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 35 0 R >>
 endobj
-17 0 obj
+35 0 obj
 << /Length 1576 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -176,10 +408,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 578.0 Tm (format with different tree
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 561.0 Tm (similar file APIs for both.) Tj ET
 endstream
 endobj
-18 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 19 0 R >>
+36 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 37 0 R >>
 endobj
-19 0 obj
+37 0 obj
 << /Length 1531 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -199,10 +431,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 578.0 Tm (a separate adapter for the
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 561.0 Tm (interpreted using HFS Plus struct layouts.) Tj ET
 endstream
 endobj
-20 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 21 0 R >>
+38 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 39 0 R >>
 endobj
-21 0 obj
+39 0 obj
 << /Length 2007 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -226,10 +458,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 458.0 Tm (implementation. The source
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 441.0 Tm (writes, boot, recovery or cross-platform compatibility.) Tj ET
 endstream
 endobj
-22 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 23 0 R >>
+40 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 41 0 R >>
 endobj
-23 0 obj
+41 0 obj
 << /Length 2704 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -258,10 +490,10 @@ BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 377 Tm (8. Check the alternate Master 
 BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 360.5 Tm (alternate copy is not a transaction journal.) Tj ET
 endstream
 endobj
-24 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 25 0 R >>
+42 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 43 0 R >>
 endobj
-25 0 obj
+43 0 obj
 << /Length 2668 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -290,10 +522,10 @@ BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 377 Tm (8. Metadata recovery must dist
 BT /F1 10 Tf 0.09 0.16 0.24 rg 1 0 0 1 55 360.5 Tm (and extents overflow rather than assuming any single copy is authoritative.) Tj ET
 endstream
 endobj
-26 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 27 0 R >>
+44 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 45 0 R >>
 endobj
-27 0 obj
+45 0 obj
 << /Length 2260 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -320,10 +552,10 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 458 Tm (partition-relative host I/O.
 BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 443 Tm (establish that every format variant or host profile is qualified.) Tj ET
 endstream
 endobj
-28 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 29 0 R >>
+46 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 47 0 R >>
 endobj
-29 0 obj
+47 0 obj
 << /Length 3618 >>
 stream
 0.05 0.13 0.22 rg 0 749 595 93 re f
@@ -363,39 +595,57 @@ BT /F1 10.2 Tf 0.07 0.16 0.23 rg 1 0 0 1 50 263 Tm (qualification.) Tj ET
 endstream
 endobj
 xref
-0 30
+0 48
 0000000000 65535 f 
 0000000009 00000 n 
 0000000058 00000 n 
-0000000192 00000 n 
-0000000262 00000 n 
-0000000337 00000 n 
-0000000405 00000 n 
-0000000551 00000 n 
-0000003328 00000 n 
-0000003474 00000 n 
-0000005485 00000 n 
-0000005633 00000 n 
-0000007426 00000 n 
-0000007574 00000 n 
-0000009349 00000 n 
-0000009497 00000 n 
-0000011279 00000 n 
-0000011427 00000 n 
-0000013055 00000 n 
-0000013203 00000 n 
-0000014786 00000 n 
-0000014934 00000 n 
-0000016993 00000 n 
-0000017141 00000 n 
-0000019897 00000 n 
-0000020045 00000 n 
-0000022765 00000 n 
-0000022913 00000 n 
-0000025225 00000 n 
-0000025373 00000 n 
+0000000255 00000 n 
+0000000325 00000 n 
+0000000400 00000 n 
+0000000468 00000 n 
+0000000614 00000 n 
+0000001870 00000 n 
+0000002016 00000 n 
+0000003294 00000 n 
+0000003442 00000 n 
+0000004685 00000 n 
+0000004833 00000 n 
+0000006178 00000 n 
+0000006326 00000 n 
+0000007663 00000 n 
+0000007811 00000 n 
+0000009126 00000 n 
+0000009274 00000 n 
+0000010527 00000 n 
+0000010675 00000 n 
+0000012143 00000 n 
+0000012291 00000 n 
+0000012978 00000 n 
+0000013126 00000 n 
+0000015904 00000 n 
+0000016052 00000 n 
+0000018064 00000 n 
+0000018212 00000 n 
+0000020005 00000 n 
+0000020153 00000 n 
+0000021928 00000 n 
+0000022076 00000 n 
+0000023858 00000 n 
+0000024006 00000 n 
+0000025634 00000 n 
+0000025782 00000 n 
+0000027365 00000 n 
+0000027513 00000 n 
+0000029572 00000 n 
+0000029720 00000 n 
+0000032476 00000 n 
+0000032624 00000 n 
+0000035344 00000 n 
+0000035492 00000 n 
+0000037804 00000 n 
+0000037952 00000 n 
 trailer
-<< /Size 30 /Root 1 0 R >>
+<< /Size 48 /Root 1 0 R >>
 startxref
-29043
+41622
 %%EOF
