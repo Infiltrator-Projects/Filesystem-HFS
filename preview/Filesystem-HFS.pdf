@@ -40,24 +40,23 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 1860 >>
+<< /Length 1661 >>
 stream
 0.06 0.15 0.23 rg 0 768 595 74 re f
 1 1 1 rg BT /F2 10 Tf 43 811 Td (INFILTRATOR / FILESYSTEM ENGINEERING) Tj ET
 BT /F2 22 Tf 43 784 Td (HFS - technical reference) Tj ET
 0.08 0.14 0.20 rg BT /F2 15 Tf 43 736 Td (1. Historical scope and volume selection) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (Apple introduced Hierarchical File System in 1985 to replace the flat Macintosh) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (File System. Classic HFS uses big-endian fields, 16-bit allocation-block) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (identifiers, a separate volume bitmap, catalog and extents-overflow B-trees, and) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (two forks per file. This is not HFS Plus. On partitioned media identify the actual) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (Apple partition boundaries before interpreting volume-relative addresses. The) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 636 Td (Master Directory Block \(MDB\) is at byte 1024, signature 0x4244. An alternate MDB) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 622 Td (normally occupies the penultimate 512-byte logical sector. MFS magic 0xD2D7 and HFS) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 608 Td (Plus signatures represent other formats. Compare plausible geometry and metadata) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 594 Td (trees before accepting either MDB.) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 570 Td (HFS arrived with the Macintosh HD20 and Finder 5.0 in 1985. A hierarchical catalog) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (replaced MFS's increasingly inefficient flat-directory search on larger disks. Dual) Tj ET
-0.08 0.14 0.20 rg BT /F3 10 Tf 43 542 Td (forks and original Macintosh collation are integral to compatibility.) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 706 Td (Apple introduced Hierarchical File System with the Macintosh HD20 and Finder) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 692 Td (5.0 in 1985 to replace the increasingly inefficient flat-directory search of) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 678 Td (Macintosh File System \(MFS\). Classic HFS uses big-endian fields, 16-bit) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 664 Td (allocation-block identifiers, a separate volume bitmap, catalog and) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 650 Td (extents-overflow B-trees, dual file forks and original Macintosh collation.) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 626 Td (On partitioned media identify actual Apple partition boundaries before) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 612 Td (interpreting volume-relative addresses. The Master Directory Block \(MDB\) is at) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 598 Td (byte 1024, signature 0x4244; an alternate normally occupies the penultimate) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 584 Td (512-byte logical sector. MFS magic 0xD2D7 and HFS Plus signatures identify) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 570 Td (other formats. Compare plausible geometry and metadata trees before accepting) Tj ET
+0.08 0.14 0.20 rg BT /F3 10 Tf 43 556 Td (either MDB.) Tj ET
 0.2 0.3 0.4 rg BT /F1 9 Tf 43 32 Td (Historical development and engineering reference | 2) Tj ET
 endstream
 endobj
@@ -261,24 +260,24 @@ xref
 0000000537 00000 n 
 0000001690 00000 n 
 0000001836 00000 n 
-0000003747 00000 n 
-0000003895 00000 n 
-0000005445 00000 n 
-0000005593 00000 n 
-0000007107 00000 n 
-0000007255 00000 n 
-0000008912 00000 n 
-0000009060 00000 n 
-0000010709 00000 n 
-0000010857 00000 n 
-0000012492 00000 n 
-0000012640 00000 n 
-0000014164 00000 n 
-0000014312 00000 n 
-0000016617 00000 n 
-0000016765 00000 n 
+0000003548 00000 n 
+0000003696 00000 n 
+0000005246 00000 n 
+0000005394 00000 n 
+0000006908 00000 n 
+0000007056 00000 n 
+0000008713 00000 n 
+0000008861 00000 n 
+0000010510 00000 n 
+0000010658 00000 n 
+0000012293 00000 n 
+0000012441 00000 n 
+0000013965 00000 n 
+0000014113 00000 n 
+0000016418 00000 n 
+0000016566 00000 n 
 trailer
 << /Size 26 /Root 1 0 R >>
 startxref
-18540
+18341
 %%EOF

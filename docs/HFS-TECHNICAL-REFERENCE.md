@@ -2,9 +2,9 @@
 
 ## Historical scope and volume selection
 
-Apple introduced Hierarchical File System in 1985 to replace the flat Macintosh File System. Classic HFS uses big-endian fields, 16-bit allocation-block identifiers, a separate volume bitmap, catalog and extents-overflow B-trees, and two forks per file. This is not HFS Plus. On partitioned media identify the actual Apple partition boundaries before interpreting volume-relative addresses. The Master Directory Block (MDB) is at byte 1024, signature 0x4244. An alternate MDB normally occupies the penultimate 512-byte logical sector. MFS magic 0xD2D7 and HFS Plus signatures represent other formats. Compare plausible geometry and metadata trees before accepting either MDB.
+Apple introduced Hierarchical File System with the Macintosh HD20 and Finder 5.0 in 1985 to replace the increasingly inefficient flat-directory search of Macintosh File System (MFS). Classic HFS uses big-endian fields, 16-bit allocation-block identifiers, a separate volume bitmap, catalog and extents-overflow B-trees, dual file forks and original Macintosh collation.
 
-HFS arrived with the Macintosh HD20 and Finder 5.0 in 1985. A hierarchical catalog replaced MFS's increasingly inefficient flat-directory search on larger disks. Dual forks and original Macintosh collation are integral to compatibility.
+On partitioned media identify actual Apple partition boundaries before interpreting volume-relative addresses. The Master Directory Block (MDB) is at byte 1024, signature 0x4244; an alternate normally occupies the penultimate 512-byte logical sector. MFS magic 0xD2D7 and HFS Plus signatures identify other formats. Compare plausible geometry and metadata trees before accepting either MDB.
 
 ## Master Directory Block: field layout
 
